@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3]
-
-[ext_resource type="Script" path="res://lookdev.gd" id="1_lookdev"]
-
-[node name="Lookdev" type="Node2D"]
-script = ExtResource("1_lookdev")

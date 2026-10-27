@@ -291,6 +291,55 @@ impl Sim {
         if id == u16::MAX { -1 } else { i64::from(id) }
     }
 
+    /// Every settlement as four ints — founding tile, tier, culture id,
+    /// finished buildings — so the renderer can stand its houses on the map
+    /// (design, Rendering: settlements are buildings).
+    #[func]
+    fn settlement_sites(&self) -> PackedInt32Array {
+        self.world
+            .settlements()
+            .iter()
+            .flat_map(|settlement| {
+                [
+                    settlement.tile as i32,
+                    i32::from(settlement.tier),
+                    i32::from(settlement.culture_id),
+                    settlement.slots.iter().flatten().count() as i32,
+                ]
+            })
+            .collect()
+    }
+
+    /// One RGBA texel per tile for the terrain shader's edges: culture id + 1
+    /// in red and green (0 = nobody), 255 in blue where the tile is ocean.
+    /// The shader compares a tile with its six neighbors to draw territory
+    /// borders, the Chosen's gold edge and the wet coastline (design,
+    /// Rendering).
+    #[func]
+    fn tile_codes(&self) -> PackedByteArray {
+        let world = &self.world;
+        world
+            .culture_id
+            .iter()
+            .zip(&world.biome)
+            .flat_map(|(&id, &biome)| {
+                let code = if id == sim_core::culture::NO_CULTURE {
+                    0
+                } else {
+                    id + 1
+                };
+                let [low, high] = code.to_le_bytes();
+                let water = if biome == sim_core::worldgen::Biome::Ocean {
+                    255
+                } else {
+                    0
+                };
+                [low, high, water, 255]
+            })
+            .collect::<Vec<u8>>()
+            .into()
+    }
+
     /// Elevation per tile, in [0, 1], for the isometric renderer's geometry.
     #[func]
     fn tile_heights(&self) -> PackedFloat32Array {

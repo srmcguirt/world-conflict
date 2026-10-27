@@ -68,7 +68,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - beliefs and identity: `belief[m]` (m≈6 axes), `language_id`, `polity_id`;
   - resources: `resource` flags.
 - **Grid:**
-  - an odd-r flat-top hex grid that wraps east to west (design, Grid), with temperature driven by latitude; *(Revised 2026-10-27: user directed hex tiles — six connecting sides for territory and true circles for every radius in the game. Storage stays a flat `Vec` per field; only the neighbor math and distance metric changed.)*
+  - an odd-r hex grid (pointy-top hexes in rows, odd rows offset half a tile east) that wraps east to west (design, Grid), with temperature driven by latitude; *(Revised 2026-10-27: user directed hex tiles — six connecting sides for territory and true circles for every radius in the game. Storage stays a flat `Vec` per field; only the neighbor math and distance metric changed.)*
   - Milestone 1 uses 160×80 (12.8k tiles);
   - the target size is 320×160 (51k tiles).
 - **Fixed tick:** 1 tick = 1 sim-year in every era (D24). Speed runs from 1× to 100 years per second.
@@ -87,10 +87,16 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - they tick yearly;
   - when one dies, it is demoted to a legend record (text only).
 - **Rendering:**
-  - The map is one isometric mesh, not an `Image`. Rust keeps returning one RGBA pixel per tile from `Sim.paint_overlay()`; Godot lays those colors onto a single `ArrayMesh` in iso space — a top diamond per tile at `elevation × HEIGHT_SCALE`, plus wall quads where the ground falls away to a higher neighbor (cliff faces). One `ShaderMaterial` does the beauty pass from per-vertex attributes alone: fixed-direction light on top faces, height AO, a slow ripple on water tiles, a wet rim at coastlines, and an antique-gold edge on the Chosen's tiles. No TileMapLayer. *(Revised 2026-10-27: user directed isometric; the old one-`Image` rasterization moved the projection into Rust and would re-rasterize the world on every camera move.)*
-  - Repaint is gated on `Sim.revision()` (R6): the color attribute updates only when a tick ran or an action applied; geometry rebuilds on the same flag, valid because powers apply only at tick boundaries (D9).
-  - Settlements, notables, the beacon and wonders are procedural iso objects in a `YSort` node — a settlement is a cached glyph texture keyed by `(culture style seed, material biome, tier, doctrine)`, anchored to its tile at elevation height, towers by tier, faith mark above the roof. The terrain mesh stays one draw call.
-  - Camera: fixed 2:1 isometric angle. Drag to pan, wheel to zoom, WASD/arrows. Screen→tile is a plain inverse 2:1 projection.
+  - The map is one hex-column mesh, not an `Image`. Rust keeps returning one RGBA pixel per tile from `Sim.paint_overlay()`; Godot lays those colors onto a single `ArrayMesh` in which every tile is a pointy-top hexagon raised as a solid column. *(Revised 2026-10-27, second pass: the first renderer drew square diamonds on the hex grid, with no sides and per-tile height jitter; the user directed hex tiles with thickness and smoothed heights.)*
+    - **Heights:** a land column's top is its elevation above sea level, softened toward the mean of its six neighbors and rounded to `HEIGHT_STEPS` terraces, so neighbors rise in readable ledges instead of jitter. Water tiles sit flat at sea level.
+    - **Thickness:** each column shows its two camera-facing sides (south-west and south-east) down to the top of the lower neighbor on that side, or to the floor along the map's south edge. Rows are emitted back to front, so nearer columns cover farther ones.
+    - **Light** is baked per vertex on the CPU from the terraced height field: tops shade by slope toward the art bible's upper-left light, south-west sides are lit and south-east sides fall in shadow. One `ShaderMaterial` adds only the time-based and overlay terms: a slow ripple on water, a wet rim at coastlines, an antique-gold edge on the Chosen's tiles, and the night pass with the beacon. No TileMapLayer.
+  - Repaint is gated on `Sim.revision()` (R6): the color texture updates only when a tick ran or an action applied; geometry rebuilds when a Raise or Lower changed heights, which is valid because powers apply only at tick boundaries (D9).
+  - **Settlements are buildings, not glyphs or markers.** Each settlement is a cluster of small procedural houses drawn with polygons — a box with a lit wall, a shaded wall and a pitched roof — standing on its founding tile's top in a y-sorted node, so nearer buildings cover farther ones.
+    - Tier sets the cluster: a camp is two or three tents; a village three or four houses; a town six or more houses around a tower; a city a ring wall with houses and towers inside.
+    - Walls take the biome's building material (timber in forest, mud brick in desert and grassland, stone in mountains); roofs take the people's dress color; a faith mark rides the tallest roof once the people hold a doctrine; the Chosen's settlements carry a gold pennant.
+    - Notables, the beacon and wonders join the same y-sorted node. The terrain mesh stays one draw call.
+  - Camera: a fixed three-quarter view. The hex plane is foreshortened vertically by `TILT` with no rotation, so hexes stay hexes and north stays up. Drag to pan, wheel to zoom, WASD/arrows. Screen→tile undoes the foreshortening, rounds to the nearest hex in cube coordinates, and checks raised columns in the rows nearer the camera first, since a tall column can cover the tile behind it.
   - Overlay modes: biome, culture, traits, belief, polity, language.
   - Scripture is an event log (verses plus kingdom events for the Chosen) in a collapsible bottom strip; one selection-driven panel floats on the map (settlement card or polity panel). *(Revised 2026-10-27: map-first UI, no permanent rail.)*
 

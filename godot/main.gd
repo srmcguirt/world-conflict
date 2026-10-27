@@ -15,9 +15,6 @@ const TICK_BUDGET_MS := 8.0
 const POWERS := ["Raise", "Lower", "Paint", "Bless", "Meteor", "Tornado", "Spawn"]
 const SCRIPTURE_WIDTH := 360.0
 
-const TILE_W := 34.0
-const TILE_H := 17.0
-const HEIGHT_SCALE := 26.0
 
 const INK := Color("#121110")
 const UMBER := Color("#2A1F17")
@@ -27,18 +24,19 @@ const TEXT := Color("#EDE6DA")
 const MUTED := Color("#A89A86")
 
 var sim: Sim
-var mesh_instance: MeshInstance2D
-var terrain_material: ShaderMaterial
+var terrain: HexTerrain
+var settlement_layer: Node2D
+var selection_ring: Line2D
+var ui: CanvasLayer
 var color_texture: ImageTexture
 var color_image: Image
+var code_texture: ImageTexture
+var code_image: Image
 var camera: Camera2D
 
 var grid_w := 0
 var grid_h := 0
 var chosen := -1
-var heights: PackedFloat32Array
-var biomes: PackedByteArray
-var cultures: PackedInt32Array
 
 var hud: Label
 var scripture_list: VBoxContainer
@@ -55,11 +53,14 @@ var selected_tile := Vector2i(-1, -1)
 var selection_panel: Panel
 var selection_label: Label
 
-var zoom := 1.0
+var zoom := 1.6
+var pressing := false
 var dragging := false
+var press_at := Vector2.ZERO
 var drag_origin := Vector2.ZERO
 var _last_overlay := -1
-var _shot_pending := false
+var _last_sites := PackedInt32Array()
+var _shots: Array[Dictionary] = []
 var _shot_timer := 0.0
 
 
@@ -68,15 +69,17 @@ func _ready() -> void:
 	add_child(sim)
 	grid_w = sim.grid_width()
 	grid_h = sim.grid_height()
-	sim.step(100)
+	var years := 100
+	var args := OS.get_cmdline_user_args()
+	var years_at := args.find("--years")
+	if years_at >= 0 and years_at + 1 < args.size():
+		years = int(args[years_at + 1])
+	sim.step(years)
 	chosen = sim.chosen_culture()
 
-	heights = sim.tile_heights()
-	biomes = sim.tile_biomes()
-	cultures = sim.tile_cultures()
-
+	ui = CanvasLayer.new()
+	add_child(ui)
 	_build_terrain()
-	_build_settlements()
 	_build_camera()
 	_build_hud()
 	_build_scripture()
@@ -86,165 +89,84 @@ func _ready() -> void:
 	print("[godot] sim ready: year %d, %s tiles" % [sim.tick(), grid_text])
 	repaint_if_dirty()
 	_refresh_scripture()
-	if OS.get_cmdline_user_args().has("--shots"):
-		_shot_pending = true
-		_shot_timer = 2.0
+	if args.has("--shots"):
+		_queue_shots()
 
 
 func _build_terrain() -> void:
-	terrain_material = ShaderMaterial.new()
-	terrain_material.shader = load("res://terrain.gdshader")
-	terrain_material.set_shader_parameter("beacon_radius", 14.0 * TILE_W)
-	terrain_material.set_shader_parameter("beacon_pos", Vector2.ZERO)
-	terrain_material.set_shader_parameter("night", 0.0)
-
-	# Color texture: updated on revision change from paint_overlay bytes.
 	color_image = Image.create(grid_w, grid_h, false, Image.FORMAT_RGBA8)
 	color_texture = ImageTexture.create_from_image(color_image)
+	code_image = Image.create(grid_w, grid_h, false, Image.FORMAT_RGBA8)
+	code_texture = ImageTexture.create_from_image(code_image)
+	terrain = HexTerrain.new()
+	terrain.setup(grid_w, grid_h, color_texture, code_texture)
+	terrain.set_chosen(chosen)
+	add_child(terrain)
+	terrain.update_heights(sim.tile_heights(), sim.tile_biomes())
 
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Buildings stand on the terrain; y-sorting puts nearer settlements in front.
+	settlement_layer = Node2D.new()
+	settlement_layer.y_sort_enabled = true
+	add_child(settlement_layer)
 
-	for y in grid_h:
-		for x in grid_w:
-			var i: int = y * grid_w + x
-			var h: float = heights[i]
-			var water: int = 1 if biomes[i] == 0 or biomes[i] == 1 else 0
-			var is_chosen: int = 1 if cultures[i] == chosen else 0
-			var hashv: float = float((x * 73 + y * 151) % 97) / 97.0
-
-			# Height AO.
-			var ao := 0.0
-			var n := 0
-			var nb_sum := 0.0
-			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var nx: int = x + d.x
-				var ny: int = y + d.y
-				if nx >= 0 and ny >= 0 and nx < grid_w and ny < grid_h:
-					nb_sum += heights[ny * grid_w + nx]
-					n += 1
-			if n > 0:
-				ao = clampf((nb_sum / float(n) - h) * 0.35, 0.0, 0.25)
-
-			# Rim: territory edge or coast.
-			var rim := 0.0
-			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var nx: int = x + d.x
-				var ny: int = y + d.y
-				if nx < 0 or ny < 0 or nx >= grid_w or ny >= grid_h:
-					continue
-				var ni: int = ny * grid_w + nx
-				if cultures[ni] != cultures[i] and (cultures[i] != -1 or cultures[ni] != -1):
-					rim = maxf(rim, 0.5 if cultures[i] == chosen else 0.3)
-				if biomes[ni] == 0 and water == 0:
-					rim = maxf(rim, 0.35)
-				if biomes[ni] != 0 and water == 1:
-					rim = maxf(rim, 0.35)
-
-			var normal := Vector3(0.0, 0.0, 1.0)
-			# Analytic normal from height gradient.
-			var gx: float = heights[mini(i + 1, heights.size() - 1)] - heights[maxi(i - 1, 0)]
-			var gy: float = (
-				heights[mini(i + grid_w, heights.size() - 1)] - heights[maxi(i - grid_w, 0)]
-			)
-			normal = Vector3(-gx * 3.0, -gy * 3.0, 1.0).normalized()
-
-			var custom := Color(float(water + is_chosen * 2), ao, rim, hashv)
-			var uv := Vector2(float(x) / float(grid_w), float(y) / float(grid_h))
-			_quad(st, iso(x, y, h), normal, uv, custom)
-
-			# Cliff walls toward higher neighbors.
-			for d in [Vector2i(0, 1), Vector2i(1, 0)]:
-				var nx: int = x + d.x
-				var ny: int = y + d.y
-				if nx >= grid_w or ny >= grid_h:
-					continue
-				var nh: float = heights[ny * grid_w + nx]
-				if nh > h + 0.02 and water == 0:
-					var a := iso(x, y, h)
-					var b := iso(x + d.x, y + d.y, h)
-					var c := iso(x + d.x, y + d.y, nh)
-					var dd := iso(x, y, nh)
-					var wall_normal := Vector3(float(-d.y), float(-d.x), 0.4).normalized()
-					st.set_color(Color(float(water + is_chosen * 2), ao, rim, hashv))
-					st.set_normal(wall_normal)
-					st.set_uv(uv)
-					_tri(st, a, b, c)
-					_tri(st, a, c, dd)
-
-	var array_mesh := st.commit()
-	# Assign the color texture to the mesh's material.
-	terrain_material.set_shader_parameter("color_tex", color_texture)
-	mesh_instance = MeshInstance2D.new()
-	mesh_instance.mesh = array_mesh
-	mesh_instance.material = terrain_material
-	add_child(mesh_instance)
+	selection_ring = Line2D.new()
+	selection_ring.width = 1.6
+	selection_ring.default_color = GOLD
+	selection_ring.visible = false
+	add_child(selection_ring)
 
 
-func iso(x: int, y: int, h: float) -> Vector2:
-	var sx := float(x - y) * TILE_W / 2.0
-	var sy := float(x + y) * TILE_H / 2.0
-	if y % 2 == 1:
-		sx += TILE_W / 4.0
-	return Vector2(sx, sy - h * HEIGHT_SCALE)
-
-
-func _quad(st: SurfaceTool, center: Vector2, normal: Vector3, uv: Vector2, custom: Color) -> void:
-	var hw := TILE_W / 2.0
-	var hh := TILE_H / 2.0
-	var pts := [
-		Vector2(center.x, center.y - hh),
-		Vector2(center.x + hw, center.y),
-		Vector2(center.x, center.y + hh),
-		Vector2(center.x - hw, center.y)
-	]
-	st.set_color(custom)
-	st.set_normal(normal)
-	st.set_uv(uv)
-	for k in [0, 1, 2, 0, 2, 3]:
-		st.add_vertex(Vector3(pts[k].x, pts[k].y, 0.0))
-
-
-func _tri(st: SurfaceTool, a: Vector2, b: Vector2, c: Vector2) -> void:
-	st.add_vertex(Vector3(a.x, a.y, 0.0))
-	st.add_vertex(Vector3(b.x, b.y, 0.0))
-	st.add_vertex(Vector3(c.x, c.y, 0.0))
-
-
-func _build_settlements() -> void:
-	var container := Node2D.new()
-	add_child(container)
-	for y in grid_h:
-		for x in grid_w:
-			var sid: int = sim.settlement_at_tile(x, y)
-			if sid < 0:
-				continue
-			var h: float = heights[y * grid_w + x]
-			var pos := iso(x, y, h)
-			var marker := ColorRect.new()
-			marker.size = Vector2(6, 6)
-			marker.position = pos - Vector2(3, 3)
-			if cultures[y * grid_w + x] == chosen:
-				marker.color = GOLD
-			else:
-				marker.color = OCHRE
-			container.add_child(marker)
+# Rebuilds the settlement objects when any settlement was founded, grew a
+# tier, changed hands or finished a building.
+func _refresh_settlements() -> void:
+	var sites: PackedInt32Array = sim.settlement_sites()
+	if sites == _last_sites:
+		return
+	_last_sites = sites
+	for child in settlement_layer.get_children():
+		child.queue_free()
+	var biomes: PackedByteArray = sim.tile_biomes()
+	for s in range(0, sites.size(), 4):
+		var tile: int = sites[s]
+		var culture: int = sites[s + 2]
+		var view := SettlementView.new()
+		view.position = terrain.top(tile % grid_w, tile / grid_w)
+		view.configure(
+			tile,
+			sites[s + 1],
+			biomes[tile],
+			sim.culture_dress(culture),
+			culture == chosen,
+			sim.culture_doctrine(culture) != "",
+			sites[s + 3]
+		)
+		settlement_layer.add_child(view)
+	_scale_settlements()
 
 
 func _build_camera() -> void:
 	camera = Camera2D.new()
-	camera.zoom = Vector2(zoom, zoom)
+	camera.position_smoothing_enabled = true
+	camera.position_smoothing_speed = 10.0
 	add_child(camera)
-	var sx := 0.0
-	var sy := 0.0
+	_set_zoom(zoom)
+	camera.position = _chosen_center()
+	camera.reset_smoothing()
+
+
+# The middle of the Chosen's land, or the map's middle before they exist.
+func _chosen_center() -> Vector2:
+	var cultures: PackedInt32Array = sim.tile_cultures()
+	var sum := Vector2.ZERO
 	var count := 0
 	for i in cultures.size():
 		if cultures[i] == chosen:
-			sx += float(i % grid_w)
-			sy += float(i / grid_w)
+			sum += Vector2(i % grid_w, i / grid_w)
 			count += 1
+	var tile := Vector2i(grid_w / 2, grid_h / 2)
 	if count > 0:
-		camera.position = iso(int(sx / float(count)), int(sy / float(count)), 0.5)
+		tile = Vector2i(sum / float(count))
+	return terrain.top(tile.x, tile.y)
 
 
 func _build_hud() -> void:
@@ -254,7 +176,7 @@ func _build_hud() -> void:
 	hud.add_theme_color_override("font_color", TEXT)
 	hud.add_theme_color_override("font_shadow_color", INK)
 	hud.add_theme_font_size_override("font_size", 14)
-	add_child(hud)
+	ui.add_child(hud)
 
 
 func _build_scripture() -> void:
@@ -263,7 +185,7 @@ func _build_scripture() -> void:
 	panel.offset_left = -SCRIPTURE_WIDTH
 	panel.offset_right = 0
 	panel.add_theme_stylebox_override("panel", _panel_style(UMBER))
-	add_child(panel)
+	ui.add_child(panel)
 
 	var column := VBoxContainer.new()
 	column.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -283,7 +205,10 @@ func _build_scripture() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(scroll)
 
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scripture_list = VBoxContainer.new()
+	scripture_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scripture_list.custom_minimum_size.x = SCRIPTURE_WIDTH - 40.0
 	scroll.add_child(scripture_list)
 
 	portrait_view = TextureRect.new()
@@ -298,7 +223,7 @@ func _build_toolbar() -> void:
 	bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	bar.position = Vector2(12, -44)
 	bar.add_theme_constant_override("separation", 4)
-	add_child(bar)
+	ui.add_child(bar)
 
 	for index in POWERS.size():
 		var button := Button.new()
@@ -314,7 +239,7 @@ func _build_selection_panel() -> void:
 	selection_panel.visible = false
 	selection_panel.position = Vector2(12, 40)
 	selection_panel.custom_minimum_size = Vector2(220, 80)
-	add_child(selection_panel)
+	ui.add_child(selection_panel)
 	selection_label = Label.new()
 	selection_label.position = Vector2(10, 8)
 	selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -334,23 +259,16 @@ func _panel_style(color: Color) -> StyleBoxFlat:
 func _process(delta: float) -> void:
 	if not paused:
 		year_accumulator += delta * float(SPEEDS[speed_index])
-		while year_accumulator >= 1.0:
-			year_accumulator -= 1.0
-			sim.step(1)
+		var years := int(year_accumulator)
+		if years > 0:
+			year_accumulator -= float(years)
+			sim.step(years)
 			repaint_if_dirty()
 			_refresh_scripture()
 	_update_hud()
-	if _shot_pending:
-		_shot_timer -= delta
-		if _shot_timer <= 0.0:
-			_shot_pending = false
-			var img := get_viewport().get_texture().get_image()
-			var path := ProjectSettings.globalize_path("res://../docs/designs/game-iso.png")
-			img.save_png(path)
-			print("[shot] saved %s" % path)
-			get_tree().quit()
+	if not _shots.is_empty():
+		_advance_shots(delta)
 
-	# Camera movement.
 	var move := Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		move.x -= 1.0
@@ -361,7 +279,48 @@ func _process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 		move.y += 1.0
 	if move != Vector2.ZERO:
-		camera.position += move.normalized() * 400.0 * delta / zoom
+		camera.position += move.normalized() * 600.0 * delta / zoom
+
+
+# --shots: a fixed tour for milestone screenshots, then quit.
+func _queue_shots() -> void:
+	paused = true
+	var center := _chosen_center()
+	var sites: PackedInt32Array = sim.settlement_sites()
+	var town := center
+	var best := -1
+	for s in range(0, sites.size(), 4):
+		if sites[s + 2] == chosen and sites[s + 1] > best:
+			best = sites[s + 1]
+			town = terrain.top(sites[s] % grid_w, sites[s] / grid_w)
+	_shots = [
+		{"name": "hex-map-05x", "zoom": 0.5, "at": center},
+		{"name": "hex-region-15x", "zoom": 1.5, "at": center},
+		{"name": "hex-town-4x", "zoom": 4.0, "at": town},
+	]
+	_begin_shot()
+
+
+func _begin_shot() -> void:
+	var shot: Dictionary = _shots[0]
+	_set_zoom(shot["zoom"])
+	camera.position = shot["at"]
+	camera.reset_smoothing()
+	_shot_timer = 0.6
+
+
+func _advance_shots(delta: float) -> void:
+	_shot_timer -= delta
+	if _shot_timer > 0.0:
+		return
+	var shot: Dictionary = _shots.pop_front()
+	var path := ProjectSettings.globalize_path("res://../docs/designs/%s.png" % shot["name"])
+	get_viewport().get_texture().get_image().save_png(path)
+	print("[shot] saved %s" % path)
+	if _shots.is_empty():
+		get_tree().quit()
+	else:
+		_begin_shot()
 
 
 func _update_hud() -> void:
@@ -419,28 +378,45 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_zoom(zoom * 1.12)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			_set_zoom(zoom / 1.12)
-		elif event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				pressing = true
+				dragging = false
+				press_at = event.position
+				drag_origin = camera.position
+			else:
+				# A press that never moved is a click on the map.
+				if pressing and not dragging:
+					_on_map_click(event.position)
+				pressing = false
+				dragging = false
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_select_power(-1)
+			_clear_selection()
+	elif event is InputEventMouseMotion and pressing:
+		if not dragging and event.position.distance_to(press_at) > 4.0:
 			dragging = true
-			drag_origin = camera.position - event.position
-		elif not event.pressed:
-			dragging = false
-	elif event is InputEventMouseMotion and dragging:
-		camera.position = drag_origin + event.position
+		if dragging:
+			camera.position = drag_origin - (event.position - press_at) / zoom
+			camera.reset_smoothing()
 
 
 func _set_zoom(z: float) -> void:
-	zoom = clampf(z, 0.5, 4.0)
+	zoom = clampf(z, 0.4, 5.0)
 	camera.zoom = Vector2(zoom, zoom)
+	_scale_settlements()
 
 
-func _on_map_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed):
-		return
-	if event.button_index == MOUSE_BUTTON_RIGHT:
-		_select_power(-1)
-		_clear_selection()
-		return
-	var tile := _tile_at(event.position)
+# Zoomed out, buildings grow so a town still reads against a camp at 0.5x
+# (art bible, readability gate 1); zoomed in they keep their true size.
+func _scale_settlements() -> void:
+	var grow := clampf(1.1 / zoom, 1.0, 2.4)
+	for view in settlement_layer.get_children():
+		view.scale = Vector2(grow, grow)
+
+
+func _on_map_click(screen_point: Vector2) -> void:
+	var tile := terrain.tile_at(terrain.get_global_mouse_position())
 	if tile.x < 0:
 		return
 	if selected_power >= 0:
@@ -460,10 +436,18 @@ func _select_power(index: int) -> void:
 func _clear_selection() -> void:
 	selected_tile = Vector2i(-1, -1)
 	selection_panel.visible = false
+	selection_ring.visible = false
+	for view in settlement_layer.get_children():
+		if view.selected:
+			view.selected = false
+			view.queue_redraw()
 
 
 func _select_tile(tile: Vector2i) -> void:
+	_clear_selection()
 	selected_tile = tile
+	selection_ring.points = terrain.hex_outline(tile.x, tile.y)
+	selection_ring.visible = true
 	var sid: int = sim.settlement_at_tile(tile.x, tile.y)
 	if sid >= 0:
 		selection_label.text = "settlement %d\ntile %d, %d" % [sid, tile.x, tile.y]
@@ -477,31 +461,20 @@ func _select_tile(tile: Vector2i) -> void:
 	selection_panel.visible = false
 
 
-func _tile_at(point: Vector2) -> Vector2i:
-	var size := get_viewport().get_visible_rect().size
-	var grid := Vector2(grid_w, grid_h)
-	var scale := minf(size.x / grid.x, size.y / grid.y)
-	var origin := (size - grid * scale) * 0.5
-	var tile := Vector2i((point - origin) / scale)
-	if tile.x < 0 or tile.y < 0 or tile.x >= grid_w or tile.y >= grid_h:
-		return Vector2i(-1, -1)
-	return tile
-	return tile
-
-
 func repaint_if_dirty() -> void:
 	if sim.revision() == last_revision and overlay_index == _last_overlay:
 		return
 	last_revision = sim.revision()
 	_last_overlay = overlay_index
-	# Rebuild the color texture from paint_overlay bytes.
 	var bytes: PackedByteArray = sim.paint_overlay(OVERLAYS[overlay_index])
 	color_image.set_data(grid_w, grid_h, false, Image.FORMAT_RGBA8, bytes)
 	color_texture.update(color_image)
-	# The mesh geometry is fixed (heights don't change except on Raise/Lower,
-	# which apply at tick boundaries and bump revision). Rebuild geometry only
-	# when needed — for M6a, rebuild on every revision is acceptable (12.8k
-	# tiles, ~77k verts, well within the frame budget).
+	code_image.set_data(grid_w, grid_h, false, Image.FORMAT_RGBA8, sim.tile_codes())
+	code_texture.update(code_image)
+	# Geometry only rebuilds when a power moved the ground; the terrain
+	# compares heights itself.
+	terrain.update_heights(sim.tile_heights(), sim.tile_biomes())
+	_refresh_settlements()
 
 
 func _refresh_scripture() -> void:

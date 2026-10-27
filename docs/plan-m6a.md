@@ -217,6 +217,13 @@ contracts are untouched. `paint_overlay(mode) -> PackedByteArray` keeps
 returning one RGBA pixel per tile — the CLI, the overlays and every existing
 test keep working. What changes is who turns tiles into a picture.
 
+> **Revised 2026-10-27 (second pass).** The terrain and settlement specs below
+> drew square diamonds and flat glyphs, which the user rejected. `GAME_DESIGN.md`
+> (Rendering) now specifies hex columns with camera-facing sides, terraced
+> heights, a three-quarter camera with no rotation, and settlements as clusters
+> of polygon houses. Where this section disagrees, the design wins; D12's "Rust
+> pixel glyphs" is superseded the same way.
+
 **Terrain: one mesh, one draw call.** Godot builds a single `ArrayMesh` laid out
 in iso space: for each tile a top diamond at `elevation × HEIGHT_SCALE`, plus a
 wall quad dropping to each higher neighbor's height wherever the ground falls
