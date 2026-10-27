@@ -51,11 +51,11 @@ impl Phonemes {
         Self { consonants, vowels }
     }
 
-    fn consonant(&self, seed: u64, index: u32) -> &str {
+    pub(crate) fn consonant_for(&self, seed: u64, index: u32) -> &str {
         &self.consonants[(draw(seed, index) % self.consonants.len() as u32) as usize]
     }
 
-    fn vowel(&self, seed: u64, index: u32) -> &str {
+    pub(crate) fn vowel_for(&self, seed: u64, index: u32) -> &str {
         &self.vowels[(draw(seed ^ 0xA5A5_5A5A, index) % self.vowels.len() as u32) as usize]
     }
 }
@@ -66,11 +66,11 @@ pub fn person_name(culture: &Culture, index: u32) -> String {
     let syllables = 2 + (draw(seed, 99) % 2) as usize;
     let mut name = String::new();
     for syllable in 0..syllables {
-        name.push_str(culture.phonemes.consonant(seed, syllable as u32 * 2));
-        name.push_str(culture.phonemes.vowel(seed, syllable as u32 * 2 + 1));
+        name.push_str(culture.phonemes.consonant_for(seed, syllable as u32 * 2));
+        name.push_str(culture.phonemes.vowel_for(seed, syllable as u32 * 2 + 1));
     }
     if draw(seed, 100).is_multiple_of(2) {
-        name.push_str(culture.phonemes.consonant(seed, 200));
+        name.push_str(culture.phonemes.consonant_for(seed, 200));
     }
     capitalize(&name)
 }
@@ -80,8 +80,8 @@ pub fn people_name(culture: &Culture) -> String {
     let seed = culture.name_seed ^ 0x5EED_0000_0000_0001;
     let mut name = String::new();
     for syllable in 0..3 {
-        name.push_str(culture.phonemes.consonant(seed, syllable * 2));
-        name.push_str(culture.phonemes.vowel(seed, syllable * 2 + 1));
+        name.push_str(culture.phonemes.consonant_for(seed, syllable * 2));
+        name.push_str(culture.phonemes.vowel_for(seed, syllable * 2 + 1));
     }
     capitalize(&name)
 }
@@ -91,10 +91,10 @@ pub fn place_name(culture: &Culture, tile: usize) -> String {
     let seed = culture.name_seed ^ (tile as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
     let mut name = String::new();
     for syllable in 0..2 {
-        name.push_str(culture.phonemes.consonant(seed, syllable * 2));
-        name.push_str(culture.phonemes.vowel(seed, syllable * 2 + 1));
+        name.push_str(culture.phonemes.consonant_for(seed, syllable * 2));
+        name.push_str(culture.phonemes.vowel_for(seed, syllable * 2 + 1));
     }
-    name.push_str(culture.phonemes.consonant(seed, 42));
+    name.push_str(culture.phonemes.consonant_for(seed, 42));
     capitalize(&name)
 }
 
@@ -111,7 +111,7 @@ pub fn hash(text: &str) -> u32 {
 /// The god has one name, and every people uses it (design, scripture).
 pub const GOD_NAME: &str = "the Watcher";
 
-fn capitalize(word: &str) -> String {
+pub(crate) fn capitalize(word: &str) -> String {
     let mut chars = word.chars();
     match chars.next() {
         Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),

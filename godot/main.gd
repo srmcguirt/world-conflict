@@ -275,12 +275,20 @@ func _refresh_scripture() -> void:
 		return
 	_show_newest_portrait()
 	var doctrine := sim.culture_doctrine(chosen)
+	var lineage: PackedStringArray = sim.tongue_lineage(chosen)
+	var tongue_text := ""
+	var own: String = lineage[lineage.size() - 1] if lineage.size() > 0 else ""
+	if lineage.size() == 1:
+		tongue_text = " · speaks %s" % own
+	elif lineage.size() > 1:
+		tongue_text = " · speaks %s of the %s line" % [own, lineage[0]]
 	scripture_header.text = (
-		"%s · %s · piety %.2f"
+		"%s · %s · piety %.2f%s"
 		% [
 			sim.culture_name(chosen),
 			doctrine if doctrine != "" else "no doctrine",
 			sim.culture_piety(chosen),
+			tongue_text,
 		]
 	)
 

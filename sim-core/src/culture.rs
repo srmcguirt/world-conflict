@@ -79,6 +79,12 @@ pub struct Culture {
     pub(crate) schism_passes: u8,
     /// Strength of belief minus absence (design, Piety).
     pub piety: f32,
+    /// The tongue she speaks (design, Language; a split spawns a dialect).
+    pub language_id: u16,
+    /// The people's population-weighted home, as mean `(x, y)` of their
+    /// tiles, refreshed on the aggregate cadence. Contact and isolation
+    /// weight the tongue's drift.
+    pub place: [f32; 2],
     /// Mean traits of the people, refreshed every 10 ticks
     /// (design, Physical adaptation). Dress and portraits read these.
     pub mean_skin: f32,
@@ -117,6 +123,8 @@ impl Culture {
             doctrine_passes: 0,
             faith_id: 0,
             schism_passes: 0,
+            language_id: 0,
+            place: [0.0; 2],
             piety: 0.0,
             sacred_tile: None,
             mean_skin: crate::traits::START,
@@ -161,6 +169,8 @@ impl Culture {
             doctrine_passes: 0,
             faith_id: parent.faith_id,
             schism_passes: 0,
+            language_id: parent.language_id,
+            place: parent.place,
             piety: parent.piety,
             sacred_tile: parent.sacred_tile,
             mean_skin: parent.mean_skin,
@@ -169,6 +179,32 @@ impl Culture {
             mean_altitude: parent.mean_altitude,
         };
         culture.name = names::people_name(&culture);
+        // The copy mutates at the split: the same events, told in the
+        // daughter's words (design, Scripture drifts with the language).
+        let name = culture.name.clone();
+        // Respell each inherited verse once, up front: the loop below only
+        // mutates.
+        let respelled: Vec<(bool, String, String)> = culture
+            .scripture
+            .iter()
+            .map(|verse| {
+                let place = (verse.place_tile != u32::MAX)
+                    .then(|| names::place_name(&culture, verse.place_tile as usize));
+                let witness = verse.witness_id.map(|id| names::person_name(&culture, id));
+                (
+                    place.is_some(),
+                    place.unwrap_or_default(),
+                    witness.unwrap_or_default(),
+                )
+            })
+            .collect();
+        for (verse, (spoken, place, witness)) in culture.scripture.iter_mut().zip(respelled) {
+            verse.people.clone_from(&name);
+            if spoken {
+                verse.place = place;
+                verse.witness = witness;
+            }
+        }
         culture
     }
 }
@@ -346,6 +382,16 @@ pub fn refresh_aggregates(world: &mut World) {
         }
         culture.piety = crate::faith::piety(&culture.belief);
     }
+    // The people's home as mean (x, y): isolation and contact weigh a
+    // tongue's drift (design, Tongues).
+    for (culture, tiles) in world.cultures.iter_mut().zip(members.iter()) {
+        let count = tiles.len() as f32;
+        if count > 0.0 {
+            let x: f32 = tiles.iter().map(|&i| (i % GRID_WIDTH) as f32).sum();
+            let y: f32 = tiles.iter().map(|&i| (i / GRID_WIDTH) as f32).sum();
+            culture.place = [x / count + 0.5, y / count + 0.5];
+        }
+    }
     // Trait means: what the people look like on average, for dress tints and
     // the traits overlay legend.
     let mut trait_sums = vec![[0.0_f32; crate::traits::TRAITS]; world.cultures.len()];
@@ -477,6 +523,19 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
     );
     world.cultures.push(daughter);
     world.split_watch.push(0);
+
+    // A split is a split of tongue too: the daughter speaks a dialect that
+    // descends from her mother's (design, Tongues).
+    let parent_language = world.cultures[parent as usize].language_id;
+    let tongue_id = world.languages.len() as u16;
+    world.languages.push(crate::language::Language::daughter(
+        tongue_id,
+        parent_language,
+        id,
+        name_seed,
+    ));
+    let daughter = world.cultures.len() - 1;
+    world.cultures[daughter].language_id = tongue_id;
 }
 
 fn mix(mut z: u64) -> u64 {

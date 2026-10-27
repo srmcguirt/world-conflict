@@ -84,9 +84,16 @@ pub fn plant_eden(world: &mut World) {
         1,
     );
     let place = crate::names::place_name(&culture, eden);
-    culture
-        .scripture
-        .push(crate::scripture::genesis(&culture.name, &place));
+    culture.scripture.push(crate::scripture::genesis(
+        &culture.name,
+        &place,
+        eden as u32,
+    ));
+    world.languages.push(crate::language::Language::root(
+        culture.id,
+        culture.name_seed,
+        culture.phonemes.clone(),
+    ));
     world.cultures.push(culture);
     world.split_watch.push(0);
 }

@@ -59,8 +59,11 @@ fn main() -> ExitCode {
                     Some("culture") | None => Overlay::Culture,
                     Some("traits") => Overlay::Traits,
                     Some("belief") => Overlay::Belief,
+                    Some("language") => Overlay::Language,
                     Some(other) => {
-                        eprintln!("unknown overlay: {other} (biome|culture|traits|belief)");
+                        eprintln!(
+                            "unknown overlay: {other} (biome|culture|traits|belief|language)"
+                        );
                         return ExitCode::FAILURE;
                     }
                 }
@@ -88,17 +91,7 @@ fn main() -> ExitCode {
     }
 
     if let Some(index) = cast {
-        let eden = world.eden_tile().expect("Eden exists");
-        let power = sim_core::powers::Power::from_index(index);
-        // Repeated casts aim at wherever the most people live, the way a
-        // player would: smiting a graveyard tells you nothing about belief.
-        for _ in 0..casts.max(1) {
-            let target = (0..world.population.len())
-                .max_by(|&a, &b| world.population[a].total_cmp(&world.population[b]))
-                .unwrap_or(eden);
-            world.queue_power(power, target % GRID_WIDTH, target / GRID_WIDTH);
-            world.step(after.max(1));
-        }
+        run_casts(&mut world, index, casts.max(1), after.max(1));
     }
 
     print_biomes(&world);
@@ -118,6 +111,20 @@ fn main() -> ExitCode {
         println!("wrote {out}");
     }
     ExitCode::SUCCESS
+}
+
+/// Casts a power `casts` times, each aimed at wherever the most people live,
+/// the way a player would: smiting a graveyard tells you nothing about belief.
+fn run_casts(world: &mut World, index: i64, casts: u32, after: u32) {
+    let eden = world.eden_tile().expect("Eden exists");
+    let power = sim_core::powers::Power::from_index(index);
+    for _ in 0..casts {
+        let target = (0..world.population.len())
+            .max_by(|&a, &b| world.population[a].total_cmp(&world.population[b]))
+            .unwrap_or(eden);
+        world.queue_power(power, target % GRID_WIDTH, target / GRID_WIDTH);
+        world.step(after);
+    }
 }
 
 fn settled(world: &World) -> usize {
@@ -168,6 +175,15 @@ fn print_biomes(world: &World) {
     }
 }
 
+/// The name of the tongue a culture speaks, or "" without one.
+fn tongue_name(world: &World, language_id: u16) -> String {
+    world
+        .languages()
+        .get(language_id as usize)
+        .map(sim_core::language::Language::name)
+        .unwrap_or_default()
+}
+
 fn print_cultures(world: &World) {
     let orphans: Vec<usize> = (0..world.population.len())
         .filter(|&i| world.population[i] >= 1.0 && world.culture_id[i] == culture::NO_CULTURE)
@@ -185,8 +201,9 @@ fn print_cultures(world: &World) {
     let cultures = world.cultures();
     println!("cultures: {}", cultures.len());
     for culture in cultures {
+        let tongue = tongue_name(world, culture.language_id);
         println!(
-            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0} faith {} {:?} piety {:.2} skin {:.2}",
+            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0} faith {} {:?} piety {:.2} skin {:.2} tongue {tongue}",
             culture.id,
             culture.parent_id,
             culture.favor,

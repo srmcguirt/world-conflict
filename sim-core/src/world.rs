@@ -12,6 +12,8 @@ use crate::belief::{self, Belief};
 use crate::culture::{self, Culture, NO_CULTURE};
 use crate::demography;
 use crate::faith::{self, Faith};
+use crate::language;
+use crate::language::Language;
 use crate::names;
 use crate::notables::{self, Budget, Legend, Notable, Role};
 use crate::powers::{self, Action, ActionKind, PendingOutcome, Power};
@@ -123,6 +125,8 @@ pub struct World {
     pub(crate) beasts: Vec<Beast>,
     /// Every religion, indexed by faith id.
     pub(crate) faiths: Vec<Faith>,
+    /// Every tongue, indexed by language id.
+    pub(crate) languages: Vec<Language>,
 }
 
 impl World {
@@ -167,6 +171,7 @@ impl World {
             next_notable_id: 1,
             beasts: Vec::new(),
             faiths: Vec::new(),
+            languages: Vec::new(),
         };
         demography::plant_eden(&mut world);
         world.faiths.push(Faith {
@@ -270,9 +275,29 @@ impl World {
                 }
                 bytes
             }
-            // Polities and languages arrive in later milestones; until then
-            // those modes paint the biome overlay.
-            Overlay::Polity | Overlay::Language => worldgen::overlay_biome(&self.biome),
+            // Peoples who share a tongue paint as one hue, offset from the
+            // culture palette so the family tree reads on the map (design,
+            // Tongues).
+            Overlay::Language => {
+                let mut bytes = Vec::with_capacity(self.biome.len() * 4);
+                for i in 0..self.biome.len() {
+                    let tongue = if self.culture_id[i] == NO_CULTURE {
+                        u16::MAX
+                    } else {
+                        self.cultures[self.culture_id[i] as usize].language_id
+                    };
+                    let [r, g, b] = if tongue == u16::MAX {
+                        culture::unsettled_color(self.biome[i])
+                    } else {
+                        culture::color(tongue.wrapping_add(32))
+                    };
+                    bytes.extend_from_slice(&[r, g, b, 255]);
+                }
+                bytes
+            }
+            // Polity assembles in a later milestone; until then it paints the
+            // biome overlay.
+            Overlay::Polity => worldgen::overlay_biome(&self.biome),
         }
     }
 
@@ -300,6 +325,11 @@ impl World {
     /// Every religion that exists, indexed by faith id.
     pub fn faiths(&self) -> &[Faith] {
         &self.faiths
+    }
+
+    /// Every tongue, indexed by language id.
+    pub fn languages(&self) -> &[Language] {
+        &self.languages
     }
 
     /// Every action that has applied, in order: the replay log.
@@ -423,6 +453,7 @@ impl World {
             polarity: crate::scripture::Polarity::Silence,
             witness: notable.name.clone(),
             place: names::place_name(culture, notable.tile as usize),
+            place_tile: notable.tile,
             people: culture.name.clone(),
             other: String::new(),
             witness_id: Some(witness_id),
@@ -443,7 +474,13 @@ impl World {
             .rev()
             .skip(from)
             .take(count)
-            .map(Verse::render)
+            .map(|verse| {
+                format!(
+                    "{}\n{}",
+                    language::native_line(self, culture_id, verse),
+                    verse.render()
+                )
+            })
             .collect()
     }
 
@@ -658,6 +695,7 @@ impl World {
         if self.tick.is_multiple_of(25) {
             culture::tick_splits(self);
             culture::refresh_aggregates(self);
+            language::tick_languages(self);
             faith::tick_doctrines(self);
             faith::tick_schisms(self);
         }

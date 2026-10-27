@@ -272,6 +272,7 @@ pub fn verse_for(world: &World, power: Power, witness_id: u32) -> Option<(u16, V
             polarity: power.intent(),
             witness: notable.name.clone(),
             place,
+            place_tile: notable.tile,
             people: culture.name.clone(),
             other: String::new(),
             witness_id: Some(witness_id),

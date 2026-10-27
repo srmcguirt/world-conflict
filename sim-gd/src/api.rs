@@ -146,6 +146,40 @@ impl Sim {
         });
     }
 
+    /// The tongue a people speaks, or an empty string if they have none.
+    #[func]
+    fn culture_tongue(&self, id: i64) -> GString {
+        let tongue_id = self
+            .world
+            .cultures()
+            .get(id.max(0) as usize)
+            .map_or(u16::MAX, |culture| culture.language_id);
+        let language = self.world.languages().get(tongue_id as usize);
+        match language {
+            Some(language) => GString::from(language.name().as_str()),
+            None => GString::new(),
+        }
+    }
+
+    /// A people's tongue lineage, root first: "the first people's" language
+    /// up to hers (design, Language family tree).
+    #[func]
+    fn tongue_lineage(&self, id: i64) -> PackedStringArray {
+        let mut array = PackedStringArray::new();
+        let tongue_id = self
+            .world
+            .cultures()
+            .get(id.max(0) as usize)
+            .map_or(u16::MAX, |culture| culture.language_id);
+        if tongue_id == u16::MAX {
+            return array;
+        }
+        for language in sim_core::language::lineage(&self.world, tongue_id) {
+            array.push(&GString::from(language.name().as_str()));
+        }
+        array
+    }
+
     /// A people's scripture, newest first, already rendered by Rust.
     #[func]
     fn scripture(&self, culture_id: i64, from: i64, count: i64) -> PackedStringArray {

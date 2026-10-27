@@ -39,6 +39,9 @@ pub struct Verse {
     pub polarity: Polarity,
     pub witness: String,
     pub place: String,
+    /// The tile this verse was spoken at, so a daughter's copy can say the
+    /// same event in her own words (design: drifting copies).
+    pub place_tile: u32,
     pub people: String,
     /// The other people in an anointing; empty otherwise.
     pub other: String,
@@ -177,8 +180,9 @@ fn templates(power: Power, polarity: Polarity) -> &'static [&'static str] {
 }
 
 /// The verse that opens every scripture, at Eden (design, Interaction states).
-pub fn genesis(people: &str, place: &str) -> Verse {
+pub fn genesis(people: &str, place: &str, tile: u32) -> Verse {
     Verse {
+        place_tile: tile,
         tick: 0,
         kind: VerseKind::Genesis,
         polarity: Polarity::Mercy,
@@ -202,6 +206,7 @@ mod tests {
             polarity,
             witness: "Kareth".to_string(),
             place: "Suran".to_string(),
+            place_tile: 17,
             people: "Melka".to_string(),
             other: String::new(),
             witness_id: Some(1),
@@ -227,7 +232,7 @@ mod tests {
 
     #[test]
     fn the_opening_verse_reads_as_a_beginning() {
-        let text = genesis("Karethi", "Suran").render();
+        let text = genesis("Karethi", "Suran", 17).render();
         assert!(text.starts_with("In the beginning"), "{text}");
         assert!(text.contains("Suran"));
         assert!(text.contains("the Karethi"));

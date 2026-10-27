@@ -258,6 +258,9 @@ pub fn tick_schisms(world: &mut World) {
                         crate::names::place_name(&world.cultures[culture_id as usize], *tile)
                     })
                     .unwrap_or_default(),
+                place_tile: witness
+                    .as_ref()
+                    .map_or(u32::MAX, |(_, _, tile)| *tile as u32),
                 people: world.cultures[culture_id as usize].name.clone(),
                 other: String::new(),
                 witness_id: witness.map(|(id, _, _)| id),
@@ -383,6 +386,9 @@ pub fn anoint(world: &mut World, culture_id: u16) {
                 .as_ref()
                 .map(|(_, _, tile)| crate::names::place_name(&world.cultures[id as usize], *tile))
                 .unwrap_or_default(),
+            place_tile: witness
+                .as_ref()
+                .map_or(u32::MAX, |(_, _, tile)| *tile as u32),
             people: world.cultures[id as usize].name.clone(),
             other,
             witness_id: witness.map(|(id, _, _)| id),

@@ -61,4 +61,16 @@ if (( new_expects > 3 )) && [[ "${SLOP_ALLOW_EXPECT:-}" != 1 ]]; then
   fail=1
 fi
 
+# 5. No stray CJK. Some models drift into Chinese mid-comment or mid-string;
+#    every word in this repo is English, including generated names.
+cjk=$(diff "$base" '*.rs' '*.gd' '*.md' '*.toml' '*.yml' '*.sh' '*.tscn' '*.godot' |
+  grep -E '^\+' | grep -v '^+++' |
+  perl -CSD -ne 'print if /[\x{2E80}-\x{9FFF}\x{F900}-\x{FAFF}\x{FF00}-\x{FFEF}\x{3000}-\x{303F}\x{AC00}-\x{D7AF}]/' || true)
+if [[ -n "$cjk" ]]; then
+  echo "slop-guard: adds Chinese, Japanese or Korean text (or fullwidth punctuation):" >&2
+  printf '%s\n' "$cjk" | head -10 >&2
+  echo "  Translate it to English." >&2
+  fail=1
+fi
+
 exit "$fail"
