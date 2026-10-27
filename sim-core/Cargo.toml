@@ -11,6 +11,9 @@ license.workspace = true
 libm = "0.2"
 # Seeded RNG: one independent stream per system, derived from the world seed.
 rand = { version = "0.9", default-features = false, features = ["std"] }
+# Building catalog and invention graph are data files (design, Data not code).
+ron = "0.8"
+serde = { version = "1", features = ["derive"] }
 rand_pcg = "0.9"
 
 [dev-dependencies]
