@@ -363,6 +363,11 @@ impl World {
         self.tile_polity.get(i).copied().unwrap_or(u16::MAX)
     }
 
+    /// Which settlement claims tile `i`, or `u32::MAX` if none.
+    pub fn settlement_of(&self, i: usize) -> u32 {
+        self.settlement_of.get(i).copied().unwrap_or(u32::MAX)
+    }
+
     /// Which polity a settlement belongs to, if any.
     pub fn polity_of_settlement(&self, settlement_id: u32) -> Option<u32> {
         society::polity_of_settlement(self, settlement_id)

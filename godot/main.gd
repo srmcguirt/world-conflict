@@ -7,7 +7,11 @@ const OVERLAY_BIOME := 0
 const OVERLAY_CULTURE := 1
 const OVERLAY_TRAITS := 2
 const OVERLAY_BELIEF := 3
-const OVERLAYS := [OVERLAY_BIOME, OVERLAY_CULTURE, OVERLAY_TRAITS, OVERLAY_BELIEF]
+const OVERLAY_LANGUAGE := 5
+const OVERLAY_POLITY := 4
+const OVERLAYS := [
+	OVERLAY_BIOME, OVERLAY_CULTURE, OVERLAY_TRAITS, OVERLAY_BELIEF, OVERLAY_LANGUAGE, OVERLAY_POLITY
+]
 ## Years per second at each speed step (design: 1x = 1 year per second).
 const SPEEDS := [1, 5, 25, 100]
 ## Sim time budget per frame, in milliseconds (design, Frame and tick scheduling).
@@ -41,6 +45,9 @@ var paused := false
 var year_accumulator := 0.0
 var overlay_index := 0
 var selected_power := -1
+var selected_tile := Vector2i(-1, -1)
+var selection_panel: Panel
+var selection_label: Label
 
 
 func _ready() -> void:
@@ -52,6 +59,7 @@ func _ready() -> void:
 	_build_hud()
 	_build_scripture()
 	_build_toolbar()
+	_build_selection_panel()
 	var grid_text := "%d x %d" % [sim.grid_width(), sim.grid_height()]
 	print("[godot] sim ready: year %d, %s tiles" % [sim.tick(), grid_text])
 	repaint()
@@ -119,6 +127,20 @@ func _build_scripture() -> void:
 	scroll.add_child(scripture_list)
 
 
+func _build_selection_panel() -> void:
+	selection_panel = Panel.new()
+	selection_panel.visible = false
+	selection_panel.position = Vector2(12, 40)
+	selection_panel.custom_minimum_size = Vector2(220, 80)
+	add_child(selection_panel)
+	selection_label = Label.new()
+	selection_label.position = Vector2(10, 8)
+	selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	selection_label.add_theme_color_override("font_color", TEXT)
+	selection_label.add_theme_font_size_override("font_size", 12)
+	selection_panel.add_child(selection_label)
+
+
 func _build_toolbar() -> void:
 	var bar := HBoxContainer.new()
 	bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -179,6 +201,10 @@ func _overlay_name() -> String:
 			return "traits"
 		OVERLAY_BELIEF:
 			return "belief"
+		OVERLAY_LANGUAGE:
+			return "language"
+		OVERLAY_POLITY:
+			return "polity"
 		_:
 			return "biome"
 
@@ -198,10 +224,34 @@ func _input(event: InputEvent) -> void:
 			repaint()
 		KEY_ESCAPE:
 			_select_power(-1)
+			_clear_selection()
 
 
 func _select_power(index: int) -> void:
 	selected_power = index
+	_clear_selection()
+
+
+func _clear_selection() -> void:
+	selected_tile = Vector2i(-1, -1)
+	selection_panel.visible = false
+
+
+func _select_tile(tile: Vector2i) -> void:
+	selected_tile = tile
+	var sid: int = sim.settlement_at_tile(tile.x, tile.y)
+	if sid >= 0:
+		var tier: String = "camp"
+		# The sim doesn't expose tier by id yet; show population instead.
+		selection_label.text = "settlement %d\ntile %d, %d" % [sid, tile.x, tile.y]
+		selection_panel.visible = true
+		return
+	var pid: int = sim.polity_at_tile(tile.x, tile.y)
+	if pid >= 0:
+		selection_label.text = "polity %d\ntile %d, %d" % [pid, tile.x, tile.y]
+		selection_panel.visible = true
+		return
+	selection_panel.visible = false
 
 
 ## Casts the selected power on the tile under the mouse.
@@ -210,18 +260,19 @@ func _on_map_input(event: InputEvent) -> void:
 		return
 	if event.button_index == MOUSE_BUTTON_RIGHT:
 		_select_power(-1)
-		return
-	if event.button_index != MOUSE_BUTTON_LEFT or selected_power < 0:
+		_clear_selection()
 		return
 	var tile := _tile_at(event.position)
 	if tile.x < 0:
 		return
-	sim.cast_power(selected_power, tile.x, tile.y)
-	if paused:
-		# A cast applies on the next tick, so a paused world steps one year to
-		# let the player see what they just did.
-		sim.step(1)
-	repaint_if_dirty()
+	if selected_power >= 0:
+		sim.cast_power(selected_power, tile.x, tile.y)
+		if paused:
+			sim.step(1)
+		repaint_if_dirty()
+		return
+	# No power selected: inspect.
+	_select_tile(tile)
 	_refresh_scripture()
 
 

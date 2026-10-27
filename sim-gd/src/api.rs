@@ -267,10 +267,28 @@ impl Sim {
         sim_core::traits::PORTRAIT_W as i64
     }
 
-    /// The portrait's height, in pixels.
+    /// The settlement id at a tile, or -1 if none claims it.
     #[func]
-    fn portrait_height(&self) -> i64 {
-        sim_core::traits::PORTRAIT_H as i64
+    fn settlement_at_tile(&self, x: i64, y: i64) -> i64 {
+        if x < 0 || y < 0 || x >= GRID_WIDTH as i64 || y >= GRID_HEIGHT as i64 {
+            return -1;
+        }
+        let id = self
+            .world
+            .settlement_of((y as usize) * GRID_WIDTH + (x as usize));
+        if id == u32::MAX { -1 } else { i64::from(id) }
+    }
+
+    /// The polity id at a tile, or -1 if none claims it.
+    #[func]
+    fn polity_at_tile(&self, x: i64, y: i64) -> i64 {
+        if x < 0 || y < 0 || x >= GRID_WIDTH as i64 || y >= GRID_HEIGHT as i64 {
+            return -1;
+        }
+        let id = self
+            .world
+            .tile_polity((y as usize) * GRID_WIDTH + (x as usize));
+        if id == u16::MAX { -1 } else { i64::from(id) }
     }
 
     /// Elevation per tile, in [0, 1], for the isometric renderer's geometry.
