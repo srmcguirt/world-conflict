@@ -170,7 +170,11 @@ system yet).
 
 ## UI design (plan-design-review, 2026-10-27)
 
-Wireframes: `docs/designs/m6a-wireframes.html` (v2, map-first). Visual direction
+Wireframes: `docs/designs/m6a-wireframes.html` (v2, map-first) and
+`docs/designs/m6a-iso-prototype.html` — a working canvas prototype of the
+isometric renderer (drag-pan, wheel-zoom, click-to-pick, cliff walls, the shader
+terms, settlement glyphs with towers and faith marks). Superseded for the map by
+the isometric direction; the panel and log designs still stand. Visual direction
 stays Kinetic Sand Glyphs — umber/black base, antique gold for the Chosen, glyph
 rings (project learning `world-conflict-visual-direction`).
 
@@ -204,6 +208,56 @@ move — isomorphic with awareness, per the user's direction.
 **Accessibility floor (non-negotiable in M6a):** no information carried by color
 alone (polity tints get a border treatment, meters print numbers), keyboard
 selection, and the log readable at its collapsed one-line height.
+
+## Isometric renderer (user direction 2026-10-27: "I wanted to go isometric")
+
+The user directed an isometric game view. This amends `GAME_DESIGN.md`'s
+architecture line ("the map is one Image") in its own commit; `sim-core`'s
+contracts are untouched. `paint_overlay(mode) -> PackedByteArray` keeps
+returning one RGBA pixel per tile — the CLI, the overlays and every existing
+test keep working. What changes is who turns tiles into a picture.
+
+**Terrain: one mesh, one draw call.** Godot builds a single `ArrayMesh` laid out
+in iso space: for each tile a top diamond at `elevation × HEIGHT_SCALE`, plus a
+wall quad dropping to each higher neighbor's height wherever the ground falls
+away (cliffs — this is what makes the world read as raised relief, the
+design's own language). Vertex colors come straight from `paint_overlay`. One
+new API, `Sim.tile_heights() -> PackedFloat32Array`, feeds the geometry;
+`revision()` gates the rebuild, which is valid because powers apply only at
+tick boundaries (D9) and every tick bumps it.
+
+**The beauty pass is one shader, not textures.** A single `ShaderMaterial`
+over the terrain mesh computes, from per-vertex attributes only:
+
+| Term | Effect |
+|---|---|
+| fixed light | top faces lit, cliff faces shaded by which way they look |
+| height AO | tiles sitting below their surroundings darken slightly |
+| water ripple | ocean and beach tiles breathe on a slow sine (per-vertex water flag from biome) |
+| wet rim | coastline tiles darken at the water edge |
+| chosen rim | the Chosen's tiles take an antique-gold edge — the design's gold-for-Chosen, painted on the world itself |
+
+No texture sampling, no PBR, one draw call for the whole map. At the design's
+320×160 gate map that is 51.2k quads in a single call with a color-attribute
+update only on tick.
+
+**Entities: cached procedural glyphs in a `YSort`.** Settlements are real iso
+objects, not tile tints (user direction): a procedural `Image` texture per
+`(culture style seed, material biome, tier, doctrine)` combination — dozens of
+unique textures, cached — drawn as a `Sprite2D` anchored to the settlement's
+tile at its elevation height, with towers stacked by tier and the faith mark
+floating above the roof. Notables are small figures in their dress colors,
+camera-culled. The M8 beacon and gold-edged wonders join the same node system.
+`YSort` gives iso depth ordering for free.
+
+**Camera and picking.** `Camera2D` over the iso-laid-out mesh: the mesh carries
+the projection, so the camera is ordinary 2D. Fixed 2:1 angle (D18), drag to
+pan, wheel to zoom (0.5×–4×), WASD/arrows, smoothed. Screen→tile is a six-line
+inverse 2:1 projection with no rotation term.
+
+**What this costs.** The M5-era `TextureRect` map in `main.gd` is replaced by
+the mesh; the overlay cycle, the HUD and the event log are unchanged. The
+design's "no TileMapLayer" clause survives — this is not a TileMap.
 
 ## GSTACK REVIEW REPORT
 

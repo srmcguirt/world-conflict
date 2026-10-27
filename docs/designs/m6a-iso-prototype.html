@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M6a isometric renderer prototype — the Godot architecture, in canvas</title>
+<style>
+  body { background: #121110; color: #EDE6DA; font: 12px/1.5 ui-monospace, Menlo, monospace; margin: 0; padding: 16px; }
+  h1 { font-size: 14px; color: #D9A845; margin: 0 0 2px; }
+  h2 { font-size: 11px; color: #B9853F; margin: 0 0 12px; font-weight: normal; }
+  #wrap { position: relative; width: 960px; height: 600px; border: 1px solid #3A2C20; }
+  canvas { display: block; cursor: grab; }
+  .hud { position: absolute; top: 8px; left: 10px; color: #A89A86; font-size: 11px; pointer-events: none; }
+  .hud b { color: #EDE6DA; font-weight: normal; }
+  .card { position: absolute; background: rgba(18,17,16,.96); border: 1px solid #3A2C20; padding: 10px 12px; width: 210px; display: none; }
+  .card h3 { margin: 0 0 2px; font-size: 12px; color: #D9A845; font-weight: normal; }
+  .card .sub { color: #A89A86; font-size: 10px; margin-bottom: 8px; }
+  .card .x { position: absolute; top: 6px; right: 8px; color: #A89A86; cursor: pointer; }
+  .log { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(18,17,16,.92); border-top: 1px solid #3A2C20; }
+  .logbar { display: flex; gap: 8px; align-items: center; padding: 4px 10px; font-size: 10px; color: #A89A86; }
+  .logbar .pip { width: 6px; height: 6px; background: #D9A845; border-radius: 50%; }
+  .logbar .chev { margin-left: auto; cursor: pointer; }
+  .logbody { border-top: 1px solid #3A2C20; padding: 6px 10px; display: none; }
+  .logbody.open { display: block; }
+  .entry { font-size: 11px; margin-bottom: 4px; display: flex; gap: 8px; cursor: pointer; }
+  .entry:hover { color: #D9A845; }
+  .entry .yr { color: #B9853F; flex: 0 0 40px; }
+  .entry .ev { color: #A89A86; flex: 0 0 66px; }
+  .note { color: #A89A86; font-size: 11px; margin-top: 10px; max-width: 960px; }
+</style>
+</head>
+<body>
+<h1>M6a isometric renderer prototype</h1>
+<h2>Canvas sketch of the exact Godot architecture: one mesh's worth of iso quads, cliff walls, the shader terms (light / height AO / water ripple / wet rim / Chosen rim), settlement glyphs with towers, drag-pan, wheel-zoom, click-to-pick.</h2>
+<div id="wrap">
+  <canvas id="cv" width="960" height="600"></canvas>
+  <div class="hud">year <b>1240</b> · running · 25 years/s · <b>polity</b> · peoples <b>7</b> · power <b>none</b></div>
+  <div class="card" id="card">
+    <span class="x" onclick="hideCard()">✕</span>
+    <h3 id="cardTitle">Vouchiak · town</h3>
+    <div class="sub" id="cardSub"></div>
+    <div class="sub" id="cardBody" style="margin-bottom:0"></div>
+  </div>
+  <div class="log">
+    <div class="logbar"><span class="pip"></span><span>year 1241 · the Kouvriamo raised a palisade at Vouchiak</span><span class="chev" onclick="toggleLog()">▴ expand (L)</span></div>
+    <div class="logbody" id="logbody">
+      <div class="entry"><span class="yr">1241</span><span class="ev">building</span><span>the Kouvriamo raised a palisade at Vouchiak</span></div>
+      <div class="entry"><span class="yr">1238</span><span class="ev">riot</span><span>the market at Vouchiak was burned; two in ten of the quarter are gone</span></div>
+      <div class="entry"><span class="yr">1231</span><span class="ev">protest</span><span>In year 1231 the elders gathered at Vouchiak and would not pay the tribute.</span></div>
+      <div class="entry"><span class="yr">1226</span><span class="ev">kingdom</span><span>the Kouvriamo raised a hall at Vouchiak and named a king</span></div>
+    </div>
+  </div>
+</div>
+<div class="note">Drag to pan · wheel to zoom · click a settlement to inspect · this is the reference for the Godot port (one ArrayMesh + one ShaderMaterial for terrain, YSort for entities, Camera2D for the view).</div>
+
+<script>
+const W = 960, H = 600, cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const GW = 40, GH = 26, TW = 34, TH = 17, HEIGHT_SCALE = 26;
+
+// A deterministic heightmap + a Chosen territory, standing in for sim state.
+let seed = 7;
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const tiles = [];
+for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+  const e = 0.5 + 0.42 * Math.sin(x * 0.31) * Math.cos(y * 0.27) + (rnd() - 0.5) * 0.18;
+  const water = e < 0.30;
+  const chosen = x > 6 && x < 20 && y > 4 && y < 15 && e >= 0.30;
+  tiles.push({ x, y, e: Math.max(0, Math.min(1, e)), water, chosen,
+    c: water ? [38, 74, 122] : e > 0.72 ? [96, 92, 88] : e > 0.55 ? [92, 104, 74] : [124, 132, 92] });
+}
+const settlements = [
+  { x: 13, y: 8, tier: 2, name: 'Vouchiak', doctrine: 'wrathful' },
+  { x: 9, y: 12, tier: 1, name: 'Suranmei', doctrine: 'protective' },
+  { x: 17, y: 7, tier: 1, name: 'Korath', doctrine: 'capricious' },
+  { x: 15, y: 13, tier: 0, name: 'Eldcamp', doctrine: 'absent' },
+  { x: 26, y: 17, tier: 1, name: 'Pegara', doctrine: 'benevolent' },
+];
+
+let cam = { x: W / 2, y: 120, z: 1 }, drag = null, selected = null;
+const proj = (x, y, e) => [cam.x + (x - y) * TW * cam.z, cam.y + (x + y) * TH * cam.z - e * HEIGHT_SCALE * cam.z];
+const unproj = (sx, sy) => { // inverse 2:1, ignoring height for picking (Godot picks the top face)
+  const px = (sx - cam.x) / (TW * cam.z), py = (sy - cam.y) / (TH * cam.z);
+  return { x: Math.round((py + px) / 2), y: Math.round((py - px) / 2) };
+};
+
+function shade(c, f) { return c.map(v => Math.max(0, Math.min(255, v * f))); }
+function draw() {
+  ctx.fillStyle = '#0E0C0A'; ctx.fillRect(0, 0, W, H);
+  const t = performance.now() / 1000;
+  const order = [...tiles].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+  for (const tl of order) {
+    const [sx, sy] = proj(tl.x, tl.y, tl.e);
+    if (sx < -80 || sx > W + 80 || sy < -80 || sy > H + 80) continue;
+    let col = tl.c.slice();
+    // height AO: lower than the surroundings -> darker
+    let nb = 0; for (const [dx, dy] of [[0,1],[1,0],[0,-1],[-1,0]]) {
+      const n = tiles.find(q => q.x === tl.x + dx && q.y === tl.y + dy); if (n && !n.water) nb++;
+    }
+    const ao = 0.82 + 0.045 * nb;
+    // water ripple
+    if (tl.water) { const r = 0.92 + 0.08 * Math.sin(t * 1.4 + tl.x * 0.7 + tl.y * 0.5); col = shade(col, r); }
+    // cliff walls toward higher neighbors (drawn before the top face)
+    for (const [dx, dy] of [[0, 1], [1, 0]]) {
+      const n = tiles.find(q => q.x === tl.x + dx && q.y === tl.y + dy);
+      if (n && !n.water && !tl.water && n.e > tl.e + 0.02) {
+        const [ax, ay] = proj(tl.x, tl.y, tl.e), [bx, by] = proj(tl.x + dx, tl.y + dy, tl.e);
+        const [cx2, cy2] = proj(tl.x + dx, tl.y + dy, n.e), [dx2, dy2] = proj(tl.x, tl.y, n.e);
+        ctx.fillStyle = `rgb(${shade(tl.c, 0.42).join(',')})`;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx2, cy2); ctx.lineTo(dx2, dy2); ctx.closePath(); ctx.fill();
+      }
+    }
+    // top face with light + AO
+    const p = [[0, -TH/2], [TW/2, 0], [0, TH/2], [-TW/2, 0]];
+    ctx.fillStyle = `rgb(${shade(col, ao * (tl.chosen ? 1.06 : 0.96)).join(',')})`;
+    ctx.beginPath(); ctx.moveTo(sx + p[0][0], sy + p[0][1]);
+    for (let i = 1; i < 4; i++) ctx.lineTo(sx + p[i][0], sy + p[i][1]);
+    ctx.closePath(); ctx.fill();
+    // Chosen rim: antique-gold edge
+    if (tl.chosen) { ctx.strokeStyle = 'rgba(217,168,69,.55)'; ctx.lineWidth = 1; ctx.stroke(); }
+    // wet rim
+    if (!tl.water) for (const [dx, dy] of [[0,1],[1,0],[0,-1],[-1,0]]) {
+      const n = tiles.find(q => q.x === tl.x + dx && q.y === tl.y + dy);
+      if (n && n.water) { ctx.strokeStyle = 'rgba(20,30,44,.5)'; ctx.lineWidth = 2; ctx.stroke(); break; }
+    }
+  }
+  // settlements: cached-glyph stand-ins with towers by tier and a faith mark
+  for (const s of settlements) {
+    const tl = tiles.find(q => q.x === s.x && q.y === s.y); if (!tl) continue;
+    const [sx, sy] = proj(s.x, s.y, tl.e);
+    if (sx < -60 || sx > W + 60) continue;
+    const z = cam.z;
+    ctx.fillStyle = s === selected ? '#FFF' : '#D9A845';
+    if (s === selected) { ctx.strokeStyle = '#D9A845'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(sx, sy, 11 * z, 5.5 * z, 0, 0, 7); ctx.stroke(); }
+    // body
+    ctx.fillRect(sx - 5 * z, sy - 9 * z, 10 * z, 9 * z);
+    // roof
+    ctx.beginPath(); ctx.moveTo(sx - 7 * z, sy - 9 * z); ctx.lineTo(sx, sy - 15 * z); ctx.lineTo(sx + 7 * z, sy - 9 * z); ctx.closePath(); ctx.fill();
+    // towers by tier
+    for (let i = 0; i < s.tier; i++) ctx.fillRect(sx - 7 * z - (i + 1) * 3 * z, sy - (12 + i * 4) * z, 3 * z, (12 + i * 4) * z);
+    // faith mark above the roof
+    ctx.font = `${9 * z}px monospace`; ctx.textAlign = 'center';
+    ctx.fillStyle = '#B9853F'; ctx.fillText('◈', sx, sy - (20 + s.tier * 4) * z);
+    if (cam.z > 1.4) { ctx.fillStyle = '#A89A86'; ctx.font = `${9 * z}px monospace`; ctx.fillText(s.name, sx, sy + 14 * z); }
+  }
+  requestAnimationFrame(draw);
+}
+
+cv.addEventListener('mousedown', e => drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y });
+addEventListener('mouseup', () => drag = null);
+addEventListener('mousemove', e => { if (drag) { cam.x = drag.cx + e.clientX - drag.x; cam.y = drag.cy + e.clientY - drag.y; } });
+cv.addEventListener('wheel', e => { e.preventDefault();
+  const k = e.deltaY < 0 ? 1.12 : 0.89, nz = Math.max(0.5, Math.min(4, cam.z * k));
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  cam.x = mx - (mx - cam.x) * (nz / cam.z); cam.y = my - (my - cam.y) * (nz / cam.z); cam.z = nz;
+}, { passive: false });
+cv.addEventListener('click', e => {
+  const r = cv.getBoundingClientRect(), p = unproj(e.clientX - r.left, e.clientY - r.top);
+  const s = settlements.find(q => q.x === p.x && q.y === p.y);
+  selected = s || null;
+  const card = document.getElementById('card');
+  if (s) { card.style.display = 'block';
+    card.style.left = Math.min(e.clientX - r.left + 14, W - 240) + 'px';
+    card.style.top = (e.clientY - r.top - 10) + 'px';
+    document.getElementById('cardTitle').textContent = `${s.name} · ${['camp','village','town'][s.tier]}`;
+    document.getElementById('cardSub').textContent = `tier ${s.tier} · ${['camp','village','town'][s.tier]} · the Kouvriamo`;
+    document.getElementById('cardBody').innerHTML = `building <b style="color:#EDE6DA">stone walls</b> · 34%<br>doctrine ${s.doctrine} · faith mark ◈`;
+  } else card.style.display = 'none';
+});
+function hideCard() { selected = null; document.getElementById('card').style.display = 'none'; }
+function toggleLog() { document.getElementById('logbody').classList.toggle('open'); }
+addEventListener('keydown', e => { if (e.key === 'l' || e.key === 'L') toggleLog(); if (e.key === 'Escape') hideCard(); });
+draw();
+</script>
+</body>
+</html>
