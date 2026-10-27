@@ -201,10 +201,7 @@ fn migration_target(world: &World, from: usize) -> Option<usize> {
     let (x, y) = (from % GRID_WIDTH, from / GRID_WIDTH);
     for radius in 1..=WAVE_RADIUS {
         let mut best: Option<(f32, usize)> = None;
-        for &(nx, ny) in &crate::hex::disc(x, y, radius as u32) {
-            if crate::hex::distance(x, y, nx, ny) != radius as u32 {
-                continue;
-            }
+        for (nx, ny) in crate::hex::ring(x, y, radius as u32) {
             let n = ny * GRID_WIDTH + nx;
             let room = room_at(world, n);
             if room <= 0.0 {

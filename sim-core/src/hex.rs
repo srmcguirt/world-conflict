@@ -86,6 +86,38 @@ pub fn disc(x: usize, y: usize, radius: u32) -> Vec<(usize, usize)> {
     out
 }
 
+/// The tiles exactly `radius` steps from `(x, y)`, in the same order
+/// [`disc`] visits them (row by row, west to east), without building the disc.
+///
+/// Within one row of a hex disc the tiles form one unbroken run, so the ring
+/// is the whole run on the top and bottom rows and just its two ends on every
+/// row between. Migration scans rings outward every year from every crowded
+/// tile, which made building and filtering whole discs the tick's main cost.
+pub fn ring(x: usize, y: usize, radius: u32) -> impl Iterator<Item = (usize, usize)> {
+    let r = radius as i32;
+    let (x, y) = (x as i32, y as i32);
+    (-r..=r).flat_map(move |dy| {
+        let ny = y + dy;
+        // In cube terms the row's column offset is `dx - shift`; every tile
+        // in the disc has that offset in [low, high] (cube distance <= r).
+        let shift = ((ny - (ny & 1)) - (y - (y & 1))) / 2;
+        let low = shift + (-r).max(-r - dy);
+        let high = shift + r.min(r - dy);
+        let full_row = dy.abs() == r;
+        let inside = ny >= 0 && ny < GRID_HEIGHT as i32;
+        let ends = if full_row || low == high {
+            [Some((low, high)), None]
+        } else {
+            [Some((low, low)), Some((high, high))]
+        };
+        ends.into_iter()
+            .flatten()
+            .filter(move |_| inside)
+            .flat_map(move |(from, to)| from..=to)
+            .map(move |dx| ((x + dx).rem_euclid(GRID_WIDTH as i32) as usize, ny as usize))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +141,29 @@ mod tests {
     #[test]
     fn a_disc_of_two_is_nineteen() {
         assert_eq!(disc(40, 40, 2).len(), 19);
+    }
+
+    #[test]
+    fn a_ring_is_the_disc_edge_in_disc_order() {
+        // Migration breaks score ties by the first tile scanned, so the ring
+        // must visit exactly the disc's edge tiles in exactly the disc's order.
+        for y in [0, 1, 2, 3, 40, 41, GRID_HEIGHT - 2, GRID_HEIGHT - 1] {
+            for x in [0, 1, 80, GRID_WIDTH - 2, GRID_WIDTH - 1] {
+                for radius in 0..=6 {
+                    let edge: Vec<(usize, usize)> = disc(x, y, radius)
+                        .into_iter()
+                        .filter(|&(nx, ny)| distance(x, y, nx, ny) == radius)
+                        .collect();
+                    let ring: Vec<(usize, usize)> = ring(x, y, radius).collect();
+                    assert_eq!(ring, edge, "tile ({x}, {y}), radius {radius}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_ring_of_two_is_twelve() {
+        assert_eq!(ring(40, 40, 2).count(), 12);
     }
 
     #[test]
