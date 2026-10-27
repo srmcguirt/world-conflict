@@ -10,6 +10,7 @@ use std::panic::{self, AssertUnwindSafe};
 
 use godot::prelude::*;
 use sim_core::World;
+use sim_core::world::{GRID_HEIGHT, GRID_WIDTH, Overlay};
 
 /// Root simulation node. One per game session, added to the scene tree.
 #[derive(GodotClass)]
@@ -39,6 +40,24 @@ impl Sim {
         self.poisoned
     }
 
+    /// Tile grid width. Wraps east to west (design, Grid).
+    #[func]
+    fn grid_width(&self) -> i64 {
+        GRID_WIDTH as i64
+    }
+
+    /// Tile grid height.
+    #[func]
+    fn grid_height(&self) -> i64 {
+        GRID_HEIGHT as i64
+    }
+
+    /// Current sim-year.
+    #[func]
+    fn tick(&self) -> i64 {
+        self.world.tick() as i64
+    }
+
     /// Hello-world smoke check: prints from Rust into the Godot console.
     #[func]
     fn hello(&self) {
@@ -55,19 +74,17 @@ impl Sim {
     /// land on a tick boundary (D9).
     #[func]
     fn step(&mut self, years: i64) {
-        if self.poisoned {
-            godot_error!("[sim] poisoned; step() ignored. Load the last autosave or quit.");
-            return;
-        }
+        self.guarded(|world| world.step(years.max(0) as u32));
+    }
 
-        let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-            self.world.step(years.max(0) as u32);
-        }));
-        if outcome.is_err() {
-            self.poisoned = true;
-            godot_error!(
-                "[sim] panic caught; the world is poisoned. Load the last autosave or quit."
-            );
+    /// RGBA bytes for the map image, one 4-byte pixel per tile.
+    ///
+    /// The UI repaints only when [`revision`](Sim::revision) changes (R6).
+    #[func]
+    fn paint_overlay(&mut self, mode: i64) -> PackedByteArray {
+        match self.guarded(|world| world.paint_overlay(Overlay::from_index(mode))) {
+            Some(bytes) => PackedByteArray::from(bytes),
+            None => PackedByteArray::new(),
         }
     }
 
@@ -75,5 +92,26 @@ impl Sim {
     #[func]
     fn revision(&self) -> i64 {
         self.world.revision() as i64
+    }
+}
+
+impl Sim {
+    /// Runs `f`, poisoning the Sim if it panics (R5/R12).
+    fn guarded<T>(&mut self, f: impl FnOnce(&mut World) -> T) -> Option<T> {
+        if self.poisoned {
+            godot_error!("[sim] poisoned; call ignored. Load the last autosave or quit.");
+            return None;
+        }
+
+        match panic::catch_unwind(AssertUnwindSafe(|| f(&mut self.world))) {
+            Ok(value) => Some(value),
+            Err(_) => {
+                self.poisoned = true;
+                godot_error!(
+                    "[sim] panic caught; the world is poisoned. Load the last autosave or quit."
+                );
+                None
+            }
+        }
     }
 }

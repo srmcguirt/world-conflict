@@ -12,6 +12,7 @@
 //! - transcendental math through `libm` (design, Determinism scope).
 
 pub mod world;
+pub mod worldgen;
 
 /// The simulation world. Re-exported so the gdext layer has one canonical path.
 pub use world::World;
