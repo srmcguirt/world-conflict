@@ -55,6 +55,7 @@ impl Overlay {
 /// Rendering never writes here; the sim never reads rendering state. Fields are
 /// one `Vec` per tile attribute, row-major: index = y * GRID_WIDTH + x
 /// (design, Architecture -> WorldState).
+#[derive(Clone)]
 pub struct World {
     /// World seed. Same seed + same actions => same history (design, Determinism).
     seed: u64,

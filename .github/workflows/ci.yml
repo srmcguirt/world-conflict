@@ -24,6 +24,8 @@ jobs:
         run: cargo clippy --all-targets --workspace -- -D warnings
       - name: Test sim-core (headless, no Godot)
         run: cargo test -p sim-core
+      - name: Benchmark gate compiles (Milestone 1: 100 years/s)
+        run: cargo bench -p sim-core --bench tick --no-run
       - name: Tick-length guard (D24: 1 tick = 1 sim-year)
         run: |
           if grep -rniE "ticks_per_year|TICKS_PER_YEAR|tick_length|YEARS_PER_TICK" sim-core/src sim-gd/src; then
