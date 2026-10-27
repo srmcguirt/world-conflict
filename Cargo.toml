@@ -19,6 +19,13 @@ sim-core = { path = "sim-core" }
 # gdext recommendation: keep file:line info for backtraces, drop type debug info.
 debug = "line-tables-only"
 
+# Godot loads target/debug/libsim_gd.dylib when the game runs from the editor
+# or `godot --path`, and an unoptimized sim ran 100 years in 5.2 s, so 100x
+# speed could never keep up. Optimizing only the sim crate keeps debug builds
+# of the godot bindings fast to compile and keeps overflow checks on.
+[profile.dev.package.sim-core]
+opt-level = 3
+
 [profile.release]
 # R12: sim-gd wraps every entry point in catch_unwind, so panics must unwind.
 panic = "unwind"
