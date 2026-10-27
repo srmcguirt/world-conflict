@@ -293,8 +293,15 @@ func _queue_shots() -> void:
 		if sites[s + 2] == chosen and sites[s + 1] > best:
 			best = sites[s + 1]
 			town = terrain.top(sites[s] % grid_w, sites[s] / grid_w)
+	# The highest summit, for the mountain close-up.
+	var heights: PackedFloat32Array = sim.tile_heights()
+	var summit := 0
+	for i in heights.size():
+		if heights[i] > heights[summit]:
+			summit = i
 	_shots = [
 		{"name": "hex-map-05x", "zoom": 0.5, "at": center},
+		{"name": "hex-mountains-3x", "zoom": 3.0, "at": terrain.top(summit % grid_w, summit / grid_w)},
 		{"name": "hex-region-15x", "zoom": 1.5, "at": center},
 		{"name": "hex-town-4x", "zoom": 4.0, "at": town},
 	]

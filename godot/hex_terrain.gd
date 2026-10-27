@@ -17,6 +17,15 @@ const MOUNTAIN := 5
 # Land within this many terraces of its neighbors slopes to meet them; a
 # bigger drop, a mountain or the sea keeps a cliff.
 const SLOPE_STEPS := 2
+# Mountains slope only into other mountains, across a wider range, so a range
+# reads as one massif with cliffs where it meets the lowland.
+const MOUNTAIN_SLOPE_STEPS := 4
+# A mountain's center rises into a peak this many pixels above its base, and an
+# edge shared by two mountains rises into a ridge between their peaks.
+const PEAK_PX := 18.0
+const RIDGE_SHARE := 0.7
+const SNOW_PX := 52.0  # height where snow starts on a mountain's faces
+const SNOW_FADE_PX := 14.0
 
 # Art bible light: from the upper left and above, toward the camera's far side.
 const LIGHT := Vector3(-0.62, -0.55, 0.75)
@@ -26,13 +35,18 @@ const SIDE_SW := 0.62  # lit side, as a share of a flat top's light
 const SIDE_SE := 0.42  # shadow side
 
 # Face kinds, written to COLOR.g for the shader.
+# 0 to KIND_SNOW is a land top with that much snow; KIND_WATER is a water top.
 const KIND_TOP := 0.0
+const KIND_SNOW := 0.2
+const KIND_WATER := 0.3
 const KIND_SIDE := 0.5
 
 var grid_w := 0
 var grid_h := 0
 var steps := PackedInt32Array()  # terrace per tile; -1 for water below the shore
 var corner_lift := PackedFloat32Array()  # 6 per tile: each top corner's height in px
+var center_lift := PackedFloat32Array()  # per tile: the center's height, a peak on mountains
+var mid_lift := PackedFloat32Array()  # 6 per tile: each side's midpoint height, a ridge between mountains
 var _biomes := PackedByteArray()
 var _heights := PackedFloat32Array()
 
@@ -62,13 +76,14 @@ func update_heights(heights: PackedFloat32Array, biomes: PackedByteArray) -> voi
 	_biomes = biomes
 	_terrace(heights, biomes)
 	_slope_corners()
+	_raise_peaks()
 	_build_mesh()
 
 
 # The tile's column top in world pixels.
 func top(x: int, y: int) -> Vector2:
 	var center := hex_center(x, y)
-	return Vector2(center.x, center.y * TILT - step_height(steps[y * grid_w + x]))
+	return Vector2(center.x, center.y * TILT - center_lift[y * grid_w + x])
 
 
 static func hex_center(x: int, y: int) -> Vector2:
@@ -149,8 +164,9 @@ func _slope_corners() -> void:
 func _corner_height(x: int, y: int, k: int) -> float:
 	var i := y * grid_w + x
 	var own := step_height(steps[i])
-	if not _slopes(i):
+	if steps[i] < 0:
 		return own
+	var mountain := _biomes[i] == MOUNTAIN
 	var low := steps[i]
 	var high := steps[i]
 	var total := steps[i]
@@ -160,18 +176,46 @@ func _corner_height(x: int, y: int, k: int) -> float:
 		if n.x < 0:
 			return own
 		var j := n.y * grid_w + n.x
-		if not _slopes(j):
+		if steps[j] < 0 or (_biomes[j] == MOUNTAIN) != mountain:
 			return own
 		low = mini(low, steps[j])
 		high = maxi(high, steps[j])
 		total += steps[j]
-	if high - low > SLOPE_STEPS:
+	if high - low > (MOUNTAIN_SLOPE_STEPS if mountain else SLOPE_STEPS):
 		return own
 	return step_height(total) / 3.0
 
 
-func _slopes(i: int) -> bool:
-	return steps[i] >= 0 and _biomes[i] != MOUNTAIN
+# Peaks and ridges: a mountain's center rises by its own peak height, which
+# varies by tile and grows with altitude; the midpoint of an edge between two
+# mountains rises by a share of the lower peak, so neighboring peaks join in a
+# ridge line and a lone mountain stands as a pointed summit.
+func _raise_peaks() -> void:
+	center_lift.resize(steps.size())
+	mid_lift.resize(steps.size() * 6)
+	for y in grid_h:
+		for x in grid_w:
+			var i := y * grid_w + x
+			center_lift[i] = step_height(steps[i]) + _peak(i)
+			for side in 6:
+				var edge := (
+					(corner_lift[i * 6 + (side + 1) % 6] + corner_lift[i * 6 + (side + 2) % 6])
+					* 0.5
+				)
+				var n := neighbor(x, y, side)
+				if n.x >= 0 and _peak(i) > 0.0:
+					var j := n.y * grid_w + n.x
+					edge += RIDGE_SHARE * minf(_peak(i), _peak(j))
+				mid_lift[i * 6 + side] = edge
+
+
+func _peak(i: int) -> float:
+	if _biomes[i] != MOUNTAIN or steps[i] < 0:
+		return 0.0
+	# A per-tile hash, so a range has taller and shorter summits.
+	var roll := float((i * 2654435761) % 1000) / 1000.0
+	var altitude := float(steps[i]) / float(HEIGHT_STEPS)
+	return PEAK_PX * (0.55 + 0.45 * roll) * (0.6 + 0.6 * altitude)
 
 
 func _build_mesh() -> void:
@@ -186,66 +230,91 @@ func _build_mesh() -> void:
 
 func _emit_column(st: SurfaceTool, x: int, y: int) -> void:
 	var i := y * grid_w + x
-	var step := steps[i]
-	var water := step < 0
+	var water := steps[i] < 0
 	var center := hex_center(x, y)
-	var lift := step_height(step)
+	var peak := center_lift[i]
+	var mountain := _biomes[i] == MOUNTAIN
 	var uv := Vector2((float(x) + 0.5) / float(grid_w), (float(y) + 0.5) / float(grid_h))
-	var kind := KIND_TOP + (0.25 if water else 0.0)
 
-	# Top: a fan from the center, so the shader knows how far each fragment
-	# sits from each edge (COLOR.ba carries the offset inside the hex). Each
-	# facet takes the light its real tilt earns.
-	var mid := _project(center, lift)
-	for k in 6:
-		var k2 := (k + 1) % 6
-		var a := corner(k)
+	# Top: two facets per side, center to corner to the side's midpoint to the
+	# next corner, so the shader knows how far each fragment sits from each
+	# edge (COLOR.ba carries the offset inside the hex) and mountains can lift
+	# the center into a peak and the midpoints into ridges. Each facet takes
+	# the light its real tilt earns.
+	for side in 6:
+		var k1 := (side + 1) % 6
+		var k2 := (side + 2) % 6
+		var a := corner(k1)
 		var b := corner(k2)
-		var ha := corner_lift[i * 6 + k]
+		var m := (a + b) * 0.5
+		var ha := corner_lift[i * 6 + k1]
 		var hb := corner_lift[i * 6 + k2]
-		var light := 0.92 if water else _facet_light(a, b, ha - lift, hb - lift)
-		_vertex(st, mid, uv, Color(light, kind, 0.5, 0.5))
-		_vertex(st, _project(center + a, ha), uv, _local(light, kind, a))
-		_vertex(st, _project(center + b, hb), uv, _local(light, kind, b))
+		var hm := mid_lift[i * 6 + side]
+		for facet in [[a, ha, m, hm], [m, hm, b, hb]]:
+			var p: Vector2 = facet[0]
+			var hp: float = facet[1]
+			var q: Vector2 = facet[2]
+			var hq: float = facet[3]
+			var light := 0.92 if water else _facet_light(p, q, hp - peak, hq - peak)
+			_vertex(st, _project(center, peak), uv, _top_color(light, Vector2.ZERO, peak, water, mountain))
+			_vertex(st, _project(center + p, hp), uv, _top_color(light, p, hp, water, mountain))
+			_vertex(st, _project(center + q, hq), uv, _top_color(light, q, hq, water, mountain))
 
 	# Camera-facing sides: south-east (corners 2-3) and south-west (3-4),
-	# dropping from this tile's edge to the neighbor's matching edge. A
-	# sloped edge meets its neighbor exactly and draws nothing.
+	# dropping from this tile's edge to the neighbor's matching edge through
+	# the side's midpoint. A sloped edge meets its neighbor exactly and draws
+	# nothing.
 	for side in [1, 2]:
 		var n := neighbor(x, y, side)
 		var c1: int = side + 1
 		var c2: int = side + 2
-		var top1 := corner_lift[i * 6 + c1]
-		var top2 := corner_lift[i * 6 + c2]
-		var foot1 := step_height(step - 3)
-		var foot2 := foot1
+		var tops := [corner_lift[i * 6 + c1], mid_lift[i * 6 + side], corner_lift[i * 6 + c2]]
+		var floor_lift := step_height(steps[i] - 3)
+		var feet := [floor_lift, floor_lift, floor_lift]
 		if n.x >= 0:
 			var j := n.y * grid_w + n.x
-			# This tile's corner side + 1 is the neighbor's corner side + 5.
-			foot1 = minf(top1, corner_lift[j * 6 + (side + 5) % 6])
-			foot2 = minf(top2, corner_lift[j * 6 + (side + 4) % 6])
-		if top1 - foot1 < 0.5 and top2 - foot2 < 0.5:
+			# This tile's corner side + 1 is the neighbor's corner side + 5,
+			# and both share the side's midpoint.
+			feet = [
+				corner_lift[j * 6 + (side + 5) % 6],
+				mid_lift[j * 6 + (side + 3) % 6],
+				corner_lift[j * 6 + (side + 4) % 6],
+			]
+		for e in 3:
+			feet[e] = minf(tops[e], feet[e])
+		if tops[0] - feet[0] < 0.5 and tops[1] - feet[1] < 0.5 and tops[2] - feet[2] < 0.5:
 			continue
-		var a := center + corner(c1)
-		var b := center + corner(c2)
+		var a := corner(c1)
+		var b := corner(c2)
+		var points := [a, (a + b) * 0.5, b]
 		var shade := (SIDE_SE if side == 1 else SIDE_SW) * (0.85 if water else 1.0)
 		var top_color := Color(shade, KIND_SIDE, 0.5, 0.5)
 		# The foot of a cliff sits in its own shadow.
 		var foot_color := Color(shade * 0.72, KIND_SIDE, 0.5, 0.5)
-		var ta := _project(a, top1)
-		var tb := _project(b, top2)
-		var fa := _project(a, foot1)
-		var fb := _project(b, foot2)
-		_vertex(st, ta, uv, top_color)
-		_vertex(st, tb, uv, top_color)
-		_vertex(st, fb, uv, foot_color)
-		_vertex(st, ta, uv, top_color)
-		_vertex(st, fb, uv, foot_color)
-		_vertex(st, fa, uv, foot_color)
+		for e in 2:
+			var ta := _project(center + points[e], tops[e])
+			var tb := _project(center + points[e + 1], tops[e + 1])
+			var fa := _project(center + points[e], feet[e])
+			var fb := _project(center + points[e + 1], feet[e + 1])
+			_vertex(st, ta, uv, top_color)
+			_vertex(st, tb, uv, top_color)
+			_vertex(st, fb, uv, foot_color)
+			_vertex(st, ta, uv, top_color)
+			_vertex(st, fb, uv, foot_color)
+			_vertex(st, fa, uv, foot_color)
 
 
-# One fan facet's light from its real normal: the center at height 0, corners
-# a and b raised by da and db pixels.
+# A top vertex: baked light, its kind (water, or land with snow on high
+# mountain faces) and its offset inside the hex.
+func _top_color(light: float, offset: Vector2, lift: float, water: bool, mountain: bool) -> Color:
+	var kind := KIND_WATER if water else KIND_TOP
+	if mountain:
+		kind = KIND_SNOW * clampf((lift - SNOW_PX) / SNOW_FADE_PX, 0.0, 1.0)
+	return _local(light, kind, offset)
+
+
+# One facet's light from its real normal: the hex center at height 0, the
+# other two points at offsets a and b raised by da and db pixels.
 func _facet_light(a: Vector2, b: Vector2, da: float, db: float) -> float:
 	var normal := Vector3(a.x, a.y, da).cross(Vector3(b.x, b.y, db)).normalized()
 	if normal.z < 0.0:

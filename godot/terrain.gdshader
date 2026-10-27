@@ -1,6 +1,7 @@
 // Terrain beauty pass (design, Rendering). Every number comes from
 // docs/art-bible.md. hex_terrain.gd bakes light into COLOR.r and writes the
-// face kind to COLOR.g (0 land top, 0.25 water top, 0.5 side) and the
+// face kind to COLOR.g (0 to 0.2 land top with that much snow, 0.3 water
+// top, 0.5 side) and the
 // fragment's offset inside its hex to COLOR.ba. Per-tile data comes from two
 // textures sampled at the tile's texel: the overlay color, and the tile code
 // (culture id + 1 in RG, ocean in B), which is compared across each edge to
@@ -18,6 +19,7 @@ uniform float beacon_radius = 388.0;
 uniform vec3 gold = vec3(0.851, 0.659, 0.271); // Chosen gold #D9A845
 uniform vec3 ink = vec3(0.071, 0.067, 0.063); // #121110
 uniform vec3 umber = vec3(0.165, 0.122, 0.090); // #2A1F17
+uniform vec3 snow_white = vec3(0.91, 0.94, 0.96); // art bible ice mid #E8F0F6
 
 varying float v_light;
 varying float v_kind;
@@ -49,7 +51,8 @@ void fragment() {
 	ivec2 tile = ivec2(floor(UV * grid));
 	vec3 col = texture(color_tex, UV).rgb;
 	bool top = v_kind < 0.4;
-	bool water = v_kind > 0.1 && v_kind < 0.4;
+	bool water = v_kind > 0.25 && v_kind < 0.4;
+	float snow = water ? 0.0 : clamp(v_kind / 0.2, 0.0, 1.0);
 	float light = v_light;
 
 	if (top) {
@@ -68,6 +71,8 @@ void fragment() {
 		vec4 there = code_at(tile + offsets[side]);
 		float mine = culture_of(here);
 		float theirs = culture_of(there);
+
+		col = mix(col, snow_white, snow);
 
 		// Every hex reads as a hex: a faint seam along its edge.
 		light *= 1.0 - 0.07 * smoothstep(0.9, 0.99, edge);
