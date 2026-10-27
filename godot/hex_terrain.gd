@@ -1,11 +1,17 @@
 class_name HexTerrain
-extends MeshInstance2D
+extends Node2D
 
-# The world as one mesh of hex columns (design, Rendering). Every tile is a
+# The world as meshes of hex columns (design, Rendering). Every tile is a
 # pointy-top hexagon in odd-r rows, raised to a terraced height, with its two
 # camera-facing sides dropping to the lower neighbor. Light is baked into the
 # vertex colors here; terrain.gdshader adds the overlay color, borders, water
 # and night from per-tile textures.
+#
+# The map is cut into full-width bands of BAND_ROWS rows, one MeshInstance2D
+# each, added back band first. Columns only ever cover rows behind them, so
+# bands in order keep the painter's order exact. When a power reshapes the
+# ground only the bands near it rebuild, and Godot skips drawing bands
+# outside the view.
 
 const RADIUS := 16.0  # hex center to corner, in world pixels
 const TILT := 0.6  # vertical foreshortening of the hex plane (three-quarter view)
@@ -41,6 +47,20 @@ const KIND_SNOW := 0.2
 const KIND_WATER := 0.3
 const KIND_SIDE := 0.5
 
+const BAND_ROWS := 4
+# A height change reaches this far: terraces soften over one ring, corners
+# over two, ridges over three, and a side wall reads its neighbor's ridge.
+const REACH := 4
+
+# Odd-r neighbor offsets on the six sides E, SE, SW, W, NW, NE, for even rows
+# and odd rows (sim-core hex.rs).
+const EVEN_SIDES := [
+	Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1)
+]
+const ODD_SIDES := [
+	Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, -1)
+]
+
 var grid_w := 0
 var grid_h := 0
 var steps := PackedInt32Array()  # terrace per tile; -1 for water below the shore
@@ -49,41 +69,118 @@ var center_lift := PackedFloat32Array()  # per tile: the center's height, a peak
 var mid_lift := PackedFloat32Array()  # 6 per tile: each side's midpoint height, a ridge between mountains
 var _biomes := PackedByteArray()
 var _heights := PackedFloat32Array()
+var _material: ShaderMaterial
+var _bands: Array[MeshInstance2D] = []
+var _ghosts: Array[MeshInstance2D] = []  # each band's copies one world west and east
+var _pending: Array[int] = []  # bands still to build during loading
 
 
 func setup(width: int, height: int, color_tex: Texture2D, code_tex: Texture2D) -> void:
 	grid_w = width
 	grid_h = height
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var shader_material := ShaderMaterial.new()
-	shader_material.shader = load("res://terrain.gdshader")
-	shader_material.set_shader_parameter("color_tex", color_tex)
-	shader_material.set_shader_parameter("code_tex", code_tex)
-	shader_material.set_shader_parameter("grid", Vector2(grid_w, grid_h))
-	shader_material.set_shader_parameter("beacon_radius", 14.0 * RADIUS * 1.732)
-	material = shader_material
+	_material = ShaderMaterial.new()
+	_material.shader = load("res://terrain.gdshader")
+	_material.set_shader_parameter("color_tex", color_tex)
+	_material.set_shader_parameter("code_tex", code_tex)
+	_material.set_shader_parameter("grid", Vector2(grid_w, grid_h))
+	_material.set_shader_parameter("beacon_radius", 14.0 * RADIUS * 1.732)
+	for b in ceili(float(grid_h) / float(BAND_ROWS)):
+		var band := MeshInstance2D.new()
+		band.material = _material
+		band.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_child(band)
+		_bands.append(band)
+		# The world wraps east to west (design, Grid): a copy of every band
+		# one world-width to each side shares its mesh, so the seam never
+		# shows. Godot culls the copies that are out of view.
+		for side in [-1.0, 1.0]:
+			var ghost := MeshInstance2D.new()
+			ghost.material = _material
+			ghost.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			ghost.position.x = side * world_width()
+			add_child(ghost)
+			_ghosts.append(ghost)
 
 
 func set_chosen(culture_id: int) -> void:
-	(material as ShaderMaterial).set_shader_parameter("chosen_code", float(culture_id + 1))
+	_material.set_shader_parameter("chosen_code", float(culture_id + 1))
 
 
-# Rebuilds the mesh only when the ground itself moved (Raise, Lower, Meteor).
-func update_heights(heights: PackedFloat32Array, biomes: PackedByteArray) -> void:
-	if heights == _heights:
-		return
+# Takes the world's shape and queues every band; the loading screen calls
+# build_next() until it reports 1.0, so the build spreads across frames.
+func begin(heights: PackedFloat32Array, biomes: PackedByteArray) -> void:
 	_heights = heights
 	_biomes = biomes
-	_terrace(heights, biomes)
-	_slope_corners()
-	_raise_peaks()
-	_build_mesh()
+	var count := heights.size()
+	steps.resize(count)
+	corner_lift.resize(count * 6)
+	center_lift.resize(count)
+	mid_lift.resize(count * 6)
+	var all := range(count)
+	_terrace(all)
+	_slope_corners(all)
+	_raise_peaks(all)
+	_pending.assign(range(_bands.size()))
+
+
+# The heights the terrain was last built from, for Sim.changed_tiles().
+func heights() -> PackedFloat32Array:
+	return _heights
+
+
+# Builds one queued band and returns the share of the terrain that is done.
+func build_next() -> float:
+	if not _pending.is_empty():
+		_build_band(_pending.pop_front())
+	return 1.0 - float(_pending.size()) / float(_bands.size())
+
+
+# Rebuilds only what a power reshaped (Raise, Lower, Meteor): the changed
+# tiles, the tiles within REACH of them, and the bands those tiles sit in.
+# Returns true when anything changed, so settlements can re-seat themselves.
+func update_heights(changed: PackedInt32Array, heights: PackedFloat32Array) -> bool:
+	if changed.is_empty():
+		return false
+	_heights = heights
+	var region := _around(changed)
+	_terrace(region)
+	_slope_corners(region)
+	_raise_peaks(region)
+	var dirty := {}
+	for i in region:
+		dirty[(i / grid_w) / BAND_ROWS] = true
+	for b in dirty:
+		_build_band(b)
+	return true
+
+
+# Every tile within REACH steps of a changed one, wrapping east to west.
+func _around(changed: PackedInt32Array) -> PackedInt32Array:
+	var mark := PackedByteArray()
+	mark.resize(grid_w * grid_h)
+	var region := PackedInt32Array()
+	for tile in changed:
+		var cx := tile % grid_w
+		var cy := tile / grid_w
+		for y in range(maxi(cy - REACH, 0), mini(cy + REACH + 1, grid_h)):
+			for dx in range(-REACH - 1, REACH + 2):
+				var i := y * grid_w + posmod(cx + dx, grid_w)
+				if mark[i] == 0:
+					mark[i] = 1
+					region.append(i)
+	region.sort()
+	return region
 
 
 # The tile's column top in world pixels.
 func top(x: int, y: int) -> Vector2:
 	var center := hex_center(x, y)
 	return Vector2(center.x, center.y * TILT - center_lift[y * grid_w + x])
+
+
+# One full lap of the world east to west, in world pixels.
+func world_width() -> float:
+	return RADIUS * sqrt(3.0) * float(grid_w)
 
 
 static func hex_center(x: int, y: int) -> Vector2:
@@ -103,16 +200,7 @@ static func corner(k: int) -> Vector2:
 
 # Odd-r neighbors on the six sides: E, SE, SW, W, NW, NE (sim-core hex.rs).
 func neighbor(x: int, y: int, side: int) -> Vector2i:
-	var east := y & 1
-	var offsets := [
-		Vector2i(1, 0),
-		Vector2i(east, 1),
-		Vector2i(east - 1, 1),
-		Vector2i(-1, 0),
-		Vector2i(east - 1, -1),
-		Vector2i(east, -1),
-	]
-	var d: Vector2i = offsets[side]
+	var d: Vector2i = ODD_SIDES[side] if y & 1 else EVEN_SIDES[side]
 	var ny := y + d.y
 	if ny < 0 or ny >= grid_h:
 		return Vector2i(-1, -1)
@@ -122,29 +210,28 @@ func neighbor(x: int, y: int, side: int) -> Vector2i:
 # Heights become terraces: land above sea level, softened toward the mean of
 # its six neighbors so a lone spike becomes a ledge, then rounded. Water sits
 # flat one step below the lowest shore.
-func _terrace(heights: PackedFloat32Array, biomes: PackedByteArray) -> void:
-	var land := PackedFloat32Array()
-	land.resize(heights.size())
-	for i in heights.size():
-		land[i] = clampf((heights[i] - SEA_LEVEL) / (1.0 - SEA_LEVEL), 0.0, 1.0)
-	steps.resize(heights.size())
-	for y in grid_h:
-		for x in grid_w:
-			var i := y * grid_w + x
-			if biomes[i] == OCEAN:
-				steps[i] = -1
-				continue
-			var sum := 0.0
-			var count := 0
-			for side in 6:
-				var n := neighbor(x, y, side)
-				if n.x >= 0:
-					sum += land[n.y * grid_w + n.x]
-					count += 1
-			var soft := land[i] * 0.55 + (sum / float(maxi(count, 1))) * 0.45
-			# Peaks rise faster than plains: a gentle curve keeps lowlands
-			# readable as one or two ledges while mountains climb.
-			steps[i] = maxi(0, roundi(pow(soft, 1.35) * float(HEIGHT_STEPS)))
+func _terrace(tiles) -> void:
+	for i in tiles:
+		if _biomes[i] == OCEAN:
+			steps[i] = -1
+			continue
+		var x: int = i % grid_w
+		var y: int = i / grid_w
+		var sum := 0.0
+		var count := 0
+		for side in 6:
+			var n := neighbor(x, y, side)
+			if n.x >= 0:
+				sum += _land(n.y * grid_w + n.x)
+				count += 1
+		var soft := _land(i) * 0.55 + (sum / float(maxi(count, 1))) * 0.45
+		# Peaks rise faster than plains: a gentle curve keeps lowlands
+		# readable as one or two ledges while mountains climb.
+		steps[i] = maxi(0, roundi(pow(soft, 1.35) * float(HEIGHT_STEPS)))
+
+
+func _land(i: int) -> float:
+	return clampf((_heights[i] - SEA_LEVEL) / (1.0 - SEA_LEVEL), 0.0, 1.0)
 
 
 # Each top corner is shared by three tiles. Where all three are low land
@@ -152,13 +239,10 @@ func _terrace(heights: PackedFloat32Array, biomes: PackedByteArray) -> void:
 # the tops tilt into one another with no wall; otherwise every tile keeps its
 # own height there and a cliff side fills the gap. Mountains and the sea never
 # slope: they keep their ledges.
-func _slope_corners() -> void:
-	corner_lift.resize(steps.size() * 6)
-	for y in grid_h:
-		for x in grid_w:
-			var i := y * grid_w + x
-			for k in 6:
-				corner_lift[i * 6 + k] = _corner_height(x, y, k)
+func _slope_corners(tiles) -> void:
+	for i in tiles:
+		for k in 6:
+			corner_lift[i * 6 + k] = _corner_height(i % grid_w, i / grid_w, k)
 
 
 func _corner_height(x: int, y: int, k: int) -> float:
@@ -190,23 +274,21 @@ func _corner_height(x: int, y: int, k: int) -> float:
 # varies by tile and grows with altitude; the midpoint of an edge between two
 # mountains rises by a share of the lower peak, so neighboring peaks join in a
 # ridge line and a lone mountain stands as a pointed summit.
-func _raise_peaks() -> void:
-	center_lift.resize(steps.size())
-	mid_lift.resize(steps.size() * 6)
-	for y in grid_h:
-		for x in grid_w:
-			var i := y * grid_w + x
-			center_lift[i] = step_height(steps[i]) + _peak(i)
-			for side in 6:
-				var edge := (
-					(corner_lift[i * 6 + (side + 1) % 6] + corner_lift[i * 6 + (side + 2) % 6])
-					* 0.5
-				)
-				var n := neighbor(x, y, side)
-				if n.x >= 0 and _peak(i) > 0.0:
-					var j := n.y * grid_w + n.x
-					edge += RIDGE_SHARE * minf(_peak(i), _peak(j))
-				mid_lift[i * 6 + side] = edge
+func _raise_peaks(tiles) -> void:
+	for i in tiles:
+		var x: int = i % grid_w
+		var y: int = i / grid_w
+		var peak := _peak(i)
+		center_lift[i] = step_height(steps[i]) + peak
+		for side in 6:
+			var edge := (
+				(corner_lift[i * 6 + (side + 1) % 6] + corner_lift[i * 6 + (side + 2) % 6])
+				* 0.5
+			)
+			var n := neighbor(x, y, side)
+			if n.x >= 0 and peak > 0.0:
+				edge += RIDGE_SHARE * minf(peak, _peak(n.y * grid_w + n.x))
+			mid_lift[i * 6 + side] = edge
 
 
 func _peak(i: int) -> float:
@@ -218,17 +300,34 @@ func _peak(i: int) -> float:
 	return PEAK_PX * (0.55 + 0.45 * roll) * (0.6 + 0.6 * altitude)
 
 
-func _build_mesh() -> void:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+# Packed arrays straight into an ArrayMesh: much cheaper than SurfaceTool,
+# which builds a vertex object per add_vertex call.
+var _verts := PackedVector2Array()
+var _colors := PackedColorArray()
+var _uvs := PackedVector2Array()
+
+
+func _build_band(b: int) -> void:
+	_verts.clear()
+	_colors.clear()
+	_uvs.clear()
 	# Back rows first: a nearer column covers whatever stands behind it.
-	for y in grid_h:
+	for y in range(b * BAND_ROWS, mini((b + 1) * BAND_ROWS, grid_h)):
 		for x in grid_w:
-			_emit_column(st, x, y)
-	mesh = st.commit()
+			_emit_column(x, y)
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = _verts
+	arrays[Mesh.ARRAY_COLOR] = _colors
+	arrays[Mesh.ARRAY_TEX_UV] = _uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_bands[b].mesh = mesh
+	_ghosts[b * 2].mesh = mesh
+	_ghosts[b * 2 + 1].mesh = mesh
 
 
-func _emit_column(st: SurfaceTool, x: int, y: int) -> void:
+func _emit_column(x: int, y: int) -> void:
 	var i := y * grid_w + x
 	var water := steps[i] < 0
 	var center := hex_center(x, y)
@@ -256,9 +355,9 @@ func _emit_column(st: SurfaceTool, x: int, y: int) -> void:
 			var q: Vector2 = facet[2]
 			var hq: float = facet[3]
 			var light := 0.92 if water else _facet_light(p, q, hp - peak, hq - peak)
-			_vertex(st, _project(center, peak), uv, _top_color(light, Vector2.ZERO, peak, water, mountain))
-			_vertex(st, _project(center + p, hp), uv, _top_color(light, p, hp, water, mountain))
-			_vertex(st, _project(center + q, hq), uv, _top_color(light, q, hq, water, mountain))
+			_vertex(_project(center, peak), uv, _top_color(light, Vector2.ZERO, peak, water, mountain))
+			_vertex(_project(center + p, hp), uv, _top_color(light, p, hp, water, mountain))
+			_vertex(_project(center + q, hq), uv, _top_color(light, q, hq, water, mountain))
 
 	# Camera-facing sides: south-east (corners 2-3) and south-west (3-4),
 	# dropping from this tile's edge to the neighbor's matching edge through
@@ -296,12 +395,12 @@ func _emit_column(st: SurfaceTool, x: int, y: int) -> void:
 			var tb := _project(center + points[e + 1], tops[e + 1])
 			var fa := _project(center + points[e], feet[e])
 			var fb := _project(center + points[e + 1], feet[e + 1])
-			_vertex(st, ta, uv, top_color)
-			_vertex(st, tb, uv, top_color)
-			_vertex(st, fb, uv, foot_color)
-			_vertex(st, ta, uv, top_color)
-			_vertex(st, fb, uv, foot_color)
-			_vertex(st, fa, uv, foot_color)
+			_vertex(ta, uv, top_color)
+			_vertex(tb, uv, top_color)
+			_vertex(fb, uv, foot_color)
+			_vertex(ta, uv, top_color)
+			_vertex(fb, uv, foot_color)
+			_vertex(fa, uv, foot_color)
 
 
 # A top vertex: baked light, its kind (water, or land with snow on high
@@ -333,15 +432,16 @@ func _project(plane: Vector2, lift: float) -> Vector2:
 	return Vector2(plane.x, plane.y * TILT - lift)
 
 
-func _vertex(st: SurfaceTool, at: Vector2, uv: Vector2, color: Color) -> void:
-	st.set_color(color)
-	st.set_uv(uv)
-	st.add_vertex(Vector3(at.x, at.y, 0.0))
+func _vertex(at: Vector2, uv: Vector2, color: Color) -> void:
+	_verts.append(at)
+	_colors.append(color)
+	_uvs.append(uv)
 
 
 # Screen point (in this node's space) to tile. A raised column covers rows
 # behind it, so rows nearer the camera are tested first.
-func tile_at(point: Vector2) -> Vector2i:
+func tile_at(at: Vector2) -> Vector2i:
+	var point := Vector2(fposmod(at.x, world_width()), at.y)
 	var row_px := RADIUS * 1.5 * TILT
 	var max_lift := step_height(HEIGHT_STEPS)
 	var first := clampi(int((point.y + max_lift) / row_px) + 1, 0, grid_h - 1)

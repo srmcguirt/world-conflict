@@ -87,7 +87,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - they tick yearly;
   - when one dies, it is demoted to a legend record (text only).
 - **Rendering:**
-  - The map is one hex-column mesh, not an `Image`. Rust keeps returning one RGBA pixel per tile from `Sim.paint_overlay()`; Godot lays those colors onto a single `ArrayMesh` in which every tile is a pointy-top hexagon raised as a solid column. *(Revised 2026-10-27, second pass: the first renderer drew square diamonds on the hex grid, with no sides and per-tile height jitter; the user directed hex tiles with thickness and smoothed heights.)*
+  - The map is one hex-column mesh, not an `Image`. Rust keeps returning one RGBA pixel per tile from `Sim.paint_overlay()`; Godot lays those colors onto hex-column meshes in which every tile is a pointy-top hexagon raised as a solid column. *(Revised 2026-10-27, second pass: the first renderer drew square diamonds on the hex grid, with no sides and per-tile height jitter; the user directed hex tiles with thickness and smoothed heights.)*
     - **Heights:** a land column's top is its elevation above sea level, softened toward the mean of its six neighbors and rounded to `HEIGHT_STEPS` terraces, so neighbors rise in readable ledges instead of jitter. Water tiles sit flat at sea level.
     - **Slopes:** each top corner is shared by three tiles. Where all three are non-mountain land within `SLOPE_STEPS` terraces of one another, the corner sits at their mean height, so tops tilt into each other and the land rolls with no wall. Mountains, the sea and steeper drops keep their ledges. *(User direction 2026-10-27: "smooth toward the other land except for cliffs and mountains".)*
     - **Peaks and ridges:** a mountain's center rises into a summit (`PEAK_PX`, varied per tile and taller with altitude), and the midpoint of every edge it shares with another mountain rises by a share of the lower summit, so neighboring peaks join in ridge lines and a lone mountain stands pointed. Mountains slope only into other mountains (within `MOUNTAIN_SLOPE_STEPS`), so a range reads as one massif with cliffs where it meets the lowland. Faces above `SNOW_PX` take snow. *(User direction 2026-10-27: "design mountain peaks and ridges from angling the hex tiles".)*
@@ -97,7 +97,8 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - **Settlements are buildings, not glyphs or markers.** Each settlement is a cluster of small procedural houses drawn with polygons — a box with a lit wall, a shaded wall and a pitched roof — standing on its founding tile's top in a y-sorted node, so nearer buildings cover farther ones.
     - Tier sets the cluster: a camp is two or three tents; a village three or four houses; a town six or more houses around a tower; a city a ring wall with houses and towers inside.
     - Walls take the biome's building material (timber in forest, mud brick in desert and grassland, stone in mountains); roofs take the people's dress color; a faith mark rides the tallest roof once the people hold a doctrine; the Chosen's settlements carry a gold pennant.
-    - Notables, the beacon and wonders join the same y-sorted node. The terrain mesh stays one draw call.
+    - Notables, the beacon and wonders join the same y-sorted node.
+  - **Bands and wrap:** the terrain is cut into full-width bands of `BAND_ROWS` rows, one mesh each, drawn back band first so the painter's order stays exact. A power rebuilds only the bands within reach of the tiles it changed (`Sim.changed_tiles`), and the loading screen builds one band per frame. Each band, and the settlement layer, has a copy one world-width to the west and east, and the camera wraps, so the east-west seam never shows (design, Grid). Godot culls bands and copies outside the view. *(Revised 2026-10-27: one mesh rebuilt in full took 484 ms per power at 160×80; bands take about 50 ms in GDScript. Building the bands in Rust is the next step if that hitch matters.)*
   - Camera: a fixed three-quarter view. The hex plane is foreshortened vertically by `TILT` with no rotation, so hexes stay hexes and north stays up. Drag to pan, wheel to zoom, WASD/arrows. Screen→tile undoes the foreshortening, rounds to the nearest hex in cube coordinates, and checks raised columns in the rows nearer the camera first, since a tall column can cover the tile behind it.
   - Overlay modes: biome, culture, traits, belief, polity, language.
   - Scripture is an event log (verses plus kingdom events for the Chosen) in a collapsible bottom strip; one selection-driven panel floats on the map (settlement card or polity panel). *(Revised 2026-10-27: map-first UI, no permanent rail.)*
@@ -1935,9 +1936,22 @@ None in this review. (12 minor spec-review concerns remain recorded in Reviewer 
 # Design Review (/plan-design-review, 2026-10-26)
 Target: this design doc's UI. No DESIGN.md exists. The gstack designer is unavailable (`--version` exit 1), so this review is text and ASCII only, with no mockups. Outside voice: a native Claude subagent [single-model]; Codex was unavailable (not a git repo). Step 0: 3/10.
 
-## Approved UI design (supersedes "Rendering" bullets above)
+## Approved UI design
 
-### Layout (D1)
+*(Revised 2026-10-27: the map look is specified under Architecture → Rendering; the play layout is the "Screen flow and play layout" section below, which supersedes Layout (D1)'s permanent scripture column. The states, journey, tokens and accessibility rules in this section still stand.)*
+
+### Screen flow and play layout (user direction 2026-10-27: "let's get a UI")
+- **Flow:** Title → New world → Loading → Play, with an Esc menu over Play. There is no other screen.
+  - **Title:** the name, and [New world] [Continue] [Settings] [Quit]. Continue is disabled with "No saved worlds yet" until save and load exist (the Load row in Interaction states).
+  - **New world:** a seed field that takes a number or a word (a word hashes to a number, shown beside it, so "share your world seed" works with either), a [Random] button, and [Begin] / [Back]. An empty or unusable seed shakes the field with "seeds are numbers or words".
+  - **Loading:** the staged bar from Interaction states, one label per real stage: "Raising the mountains…" (world generation), "Shaping the land…" (terrain bands, which fill the bar), "Setting the first people by the river…" (settlements and camera). The seed stays on screen. The terrain build is spread across frames so the bar moves.
+  - **Play** opens paused at year 0 on Eden, per the journey storyboard.
+  - **Esc menu:** pauses the world while open. [Resume] [Settings] [New world] [Main menu] [Quit]. Esc first clears an armed power or a selection; only an Esc with nothing to clear opens the menu.
+  - **Settings:** pause on great events (on by default), UI scale (80–150%), and show frame time. Saved to `user://settings.cfg`.
+- **Play layout (D10):** the map fills the window. A one-line top bar holds year, speed, overlay and peoples on the left and a menu button on the right. The power toolbar sits bottom-center. The event log is a strip along the bottom edge, one line collapsed (the newest verse, with a gold pip when something new arrives), and `L` expands it to the recent entries. One selection panel floats top-left under the bar when something is clicked.
+- **Keys:** Space pause, `[` `]` speed, `M` overlay, `L` log, `H` home to the Chosen, `1`–`7` powers, Esc as above.
+
+### Layout (D1) — superseded by Screen flow and play layout
 ```
 ┌──────────────────────────────────────────────┬────────────────┐
 │ year 1,204 · ▶ 25× · overlay [Culture ▾] ⓘ  │ SCRIPTURE of   │

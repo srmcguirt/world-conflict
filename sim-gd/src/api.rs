@@ -340,6 +340,52 @@ impl Sim {
             .into()
     }
 
+    /// One settlement for the selection card: founding tile, tier, culture
+    /// id, finished buildings, people (rounded) and building slots. Empty when
+    /// no settlement has that id.
+    #[func]
+    fn settlement_card(&self, id: i64) -> PackedInt32Array {
+        let Some(settlement) = self
+            .world
+            .settlements()
+            .iter()
+            .find(|settlement| i64::from(settlement.id) == id)
+        else {
+            return PackedInt32Array::new();
+        };
+        PackedInt32Array::from(
+            &[
+                settlement.tile as i32,
+                i32::from(settlement.tier),
+                i32::from(settlement.culture_id),
+                settlement.slots.iter().flatten().count() as i32,
+                settlement.population.round() as i32,
+                settlement.slots.len() as i32,
+            ][..],
+        )
+    }
+
+    /// The tiles whose elevation differs from `previous`, so the renderer
+    /// rebuilds only the terrain a power reshaped (design, Rendering). A
+    /// `previous` of the wrong size means every tile.
+    #[func]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "GDScript hands #[func] arguments over by value"
+    )]
+    fn changed_tiles(&self, previous: PackedFloat32Array) -> PackedInt32Array {
+        let now = &self.world.elevation;
+        if previous.len() != now.len() {
+            return (0..now.len() as i32).collect();
+        }
+        now.iter()
+            .zip(previous.as_slice())
+            .enumerate()
+            .filter(|(_, (a, b))| a.to_bits() != b.to_bits())
+            .map(|(tile, _)| tile as i32)
+            .collect()
+    }
+
     /// Elevation per tile, in [0, 1], for the isometric renderer's geometry.
     #[func]
     fn tile_heights(&self) -> PackedFloat32Array {
