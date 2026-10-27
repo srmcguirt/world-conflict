@@ -21,6 +21,7 @@ use crate::powers::{self, Action, ActionKind, PendingOutcome, Power};
 use crate::scripture::Verse;
 use crate::settlements;
 use crate::settlements::Settlement;
+use crate::society;
 use crate::traits;
 use crate::worldgen::{self, Biome, GeneratedWorld};
 
@@ -130,6 +131,10 @@ pub struct World {
     pub(crate) faiths: Vec<Faith>,
     /// Every tongue, indexed by language id.
     pub(crate) languages: Vec<Language>,
+    /// Every polity, indexed by polity id.
+    pub(crate) polities: Vec<society::Polity>,
+    /// Which polity claims each tile, or `u16::MAX` if none.
+    pub(crate) tile_polity: Vec<u16>,
     /// Every settlement, indexed by settlement id.
     pub(crate) settlements: Vec<Settlement>,
     /// Which settlement claims each tile, or `u32::MAX` if none.
@@ -180,6 +185,8 @@ impl World {
             faiths: Vec::new(),
             languages: Vec::new(),
             settlements: Vec::new(),
+            polities: Vec::new(),
+            tile_polity: vec![u16::MAX; GRID_WIDTH * GRID_HEIGHT],
             settlement_of: vec![u32::MAX; GRID_WIDTH * GRID_HEIGHT],
         };
         demography::plant_eden(&mut world);
@@ -344,6 +351,21 @@ impl World {
     /// Every settlement, indexed by settlement id.
     pub fn settlements(&self) -> &[Settlement] {
         &self.settlements
+    }
+
+    /// Every polity, indexed by polity id.
+    pub fn polities(&self) -> &[society::Polity] {
+        &self.polities
+    }
+
+    /// Which polity claims tile `i`, or `u16::MAX` if none.
+    pub fn tile_polity(&self, i: usize) -> u16 {
+        self.tile_polity.get(i).copied().unwrap_or(u16::MAX)
+    }
+
+    /// Which polity a settlement belongs to, if any.
+    pub fn polity_of_settlement(&self, settlement_id: u32) -> Option<u32> {
+        society::polity_of_settlement(self, settlement_id)
     }
 
     /// Every action that has applied, in order: the replay log.
@@ -713,6 +735,7 @@ impl World {
             language::tick_languages(self);
             settlements::tick_settlements(self);
             settlements::tick_construction(self);
+            society::tick_polities(self);
             faith::tick_doctrines(self);
             faith::tick_schisms(self);
         }
