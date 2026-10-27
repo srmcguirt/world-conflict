@@ -108,14 +108,21 @@ function draw() {
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx2, cy2); ctx.lineTo(dx2, dy2); ctx.closePath(); ctx.fill();
       }
     }
-    // top face with light + AO
-    const p = [[0, -TH/2], [TW/2, 0], [0, TH/2], [-TW/2, 0]];
+    // top face with light + AO; geometry scales with the camera exactly as
+    // Camera2D.zoom scales the Godot mesh - no gaps at any zoom.
+    const z = cam.z, hw = TW / 2 * z, hh = TH / 2 * z;
+    // procedural detail: biome-keyed micro-variation, what the Godot shader
+    // does from attributes (grass tufts on grassland, speckle on rock).
+    const hash = (Math.sin(tl.x * 12.9898 + tl.y * 78.233) * 43758.5453) % 1;
+    const tuft = Math.abs(hash) < 0.06 && !tl.water;
     ctx.fillStyle = `rgb(${shade(col, ao * (tl.chosen ? 1.06 : 0.96)).join(',')})`;
-    ctx.beginPath(); ctx.moveTo(sx + p[0][0], sy + p[0][1]);
-    for (let i = 1; i < 4; i++) ctx.lineTo(sx + p[i][0], sy + p[i][1]);
-    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(sx, sy - hh); ctx.lineTo(sx + hw, sy); ctx.lineTo(sx, sy + hh); ctx.lineTo(sx - hw, sy); ctx.closePath(); ctx.fill();
+    if (tuft && z > 1.2) { ctx.strokeStyle = 'rgba(30,42,22,.5)'; ctx.lineWidth = Math.max(1, z);
+      ctx.beginPath(); ctx.moveTo(sx - 2 * z, sy + 2 * z); ctx.lineTo(sx - 3 * z, sy - 3 * z); ctx.moveTo(sx + 2 * z, sy + 1 * z); ctx.lineTo(sx + 4 * z, sy - 2 * z); ctx.stroke(); }
+    if (!tl.water && tl.e > 0.72 && z > 1.2) { ctx.fillStyle = 'rgba(60,58,54,.6)';
+      ctx.fillRect(sx + (hash > 0 ? 3 : -6) * z, sy - 1 * z, 2 * z, 2 * z); }
     // Chosen rim: antique-gold edge
-    if (tl.chosen) { ctx.strokeStyle = 'rgba(217,168,69,.55)'; ctx.lineWidth = 1; ctx.stroke(); }
+    if (tl.chosen) { ctx.strokeStyle = 'rgba(217,168,69,.55)'; ctx.lineWidth = Math.max(1, cam.z); ctx.stroke(); }
     // wet rim
     if (!tl.water) for (const [dx, dy] of [[0,1],[1,0],[0,-1],[-1,0]]) {
       const n = tiles.find(q => q.x === tl.x + dx && q.y === tl.y + dy);
