@@ -12,6 +12,7 @@
 //! - transcendental math through `libm` (design, Determinism scope).
 
 pub mod belief;
+pub mod buildings;
 pub mod culture;
 pub mod demography;
 pub mod faith;

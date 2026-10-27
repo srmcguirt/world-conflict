@@ -1,0 +1,51 @@
+// Building catalog (design, Buildings and settlement advancement).
+// Loaded at worldgen, hashed into SIM_BUILD. Content tuning needs no code change.
+(
+    lines: [
+        (
+            id: 0,
+            name: "Food",
+            levels: [
+                (name: "granary", era: 0, upkeep: 1, effect: "absorbs_one_famine"),
+                (name: "irrigation_works", era: 1, upkeep: 2, effect: "capacity_plus_10"),
+                (name: "terraces", era: 2, upkeep: 3, effect: "capacity_plus_20"),
+            ],
+        ),
+        (
+            id: 1,
+            name: "Defense",
+            levels: [
+                (name: "palisade", era: 0, upkeep: 1, effect: "conquest_minus_10"),
+                (name: "stone_walls", era: 1, upkeep: 2, effect: "conquest_minus_25"),
+                (name: "citadel", era: 2, upkeep: 3, effect: "conquest_minus_40"),
+            ],
+        ),
+        (
+            id: 2,
+            name: "Faith",
+            levels: [
+                (name: "shrine", era: 0, upkeep: 1, effect: "piety_plus_01"),
+                (name: "temple", era: 1, upkeep: 2, effect: "verse_drift_minus_30"),
+                (name: "great_temple", era: 2, upkeep: 3, effect: "verse_drift_minus_60"),
+            ],
+        ),
+        (
+            id: 3,
+            name: "Rule",
+            levels: [
+                (name: "council_fire", era: 0, upkeep: 1, effect: "legitimacy_plus_01"),
+                (name: "hall", era: 1, upkeep: 2, effect: "legitimacy_plus_02"),
+                (name: "palace", era: 2, upkeep: 3, effect: "legitimacy_plus_03"),
+            ],
+        ),
+        (
+            id: 4,
+            name: "Trade",
+            levels: [
+                (name: "barter_ground", era: 0, upkeep: 1, effect: "prosperity_plus_01"),
+                (name: "market", era: 1, upkeep: 2, effect: "prosperity_plus_02"),
+                (name: "harbor", era: 2, upkeep: 3, effect: "prosperity_plus_03"),
+            ],
+        ),
+    ],
+)

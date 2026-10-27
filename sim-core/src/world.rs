@@ -696,6 +696,7 @@ impl World {
         demography::sync_membership(self);
         powers::close_windows(self);
         self.demote_old_witnesses();
+        settlements::tick_labor(self);
 
         // Aggregates refresh every 10 ticks; splits and schisms check every 25
         // (design, Simulation contracts).
@@ -711,6 +712,7 @@ impl World {
             culture::refresh_aggregates(self);
             language::tick_languages(self);
             settlements::tick_settlements(self);
+            settlements::tick_construction(self);
             faith::tick_doctrines(self);
             faith::tick_schisms(self);
         }
