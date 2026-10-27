@@ -13,6 +13,10 @@ const HEIGHT_STEPS := 10  # terraces between sea level and the highest peak
 const STEP_PX := 7.0  # screen height of one terrace
 const SEA_LEVEL := 0.5  # sim-core worldgen::SEA_LEVEL
 const OCEAN := 0
+const MOUNTAIN := 5
+# Land within this many terraces of its neighbors slopes to meet them; a
+# bigger drop, a mountain or the sea keeps a cliff.
+const SLOPE_STEPS := 2
 
 # Art bible light: from the upper left and above, toward the camera's far side.
 const LIGHT := Vector3(-0.62, -0.55, 0.75)
@@ -28,6 +32,8 @@ const KIND_SIDE := 0.5
 var grid_w := 0
 var grid_h := 0
 var steps := PackedInt32Array()  # terrace per tile; -1 for water below the shore
+var corner_lift := PackedFloat32Array()  # 6 per tile: each top corner's height in px
+var _biomes := PackedByteArray()
 var _heights := PackedFloat32Array()
 
 
@@ -53,7 +59,9 @@ func update_heights(heights: PackedFloat32Array, biomes: PackedByteArray) -> voi
 	if heights == _heights:
 		return
 	_heights = heights
+	_biomes = biomes
 	_terrace(heights, biomes)
+	_slope_corners()
 	_build_mesh()
 
 
@@ -124,6 +132,48 @@ func _terrace(heights: PackedFloat32Array, biomes: PackedByteArray) -> void:
 			steps[i] = maxi(0, roundi(pow(soft, 1.35) * float(HEIGHT_STEPS)))
 
 
+# Each top corner is shared by three tiles. Where all three are low land
+# within SLOPE_STEPS of each other, the corner sits at their mean height, so
+# the tops tilt into one another with no wall; otherwise every tile keeps its
+# own height there and a cliff side fills the gap. Mountains and the sea never
+# slope: they keep their ledges.
+func _slope_corners() -> void:
+	corner_lift.resize(steps.size() * 6)
+	for y in grid_h:
+		for x in grid_w:
+			var i := y * grid_w + x
+			for k in 6:
+				corner_lift[i * 6 + k] = _corner_height(x, y, k)
+
+
+func _corner_height(x: int, y: int, k: int) -> float:
+	var i := y * grid_w + x
+	var own := step_height(steps[i])
+	if not _slopes(i):
+		return own
+	var low := steps[i]
+	var high := steps[i]
+	var total := steps[i]
+	# Corner k joins the sides k - 2 and k - 1.
+	for side in [(k + 4) % 6, (k + 5) % 6]:
+		var n := neighbor(x, y, side)
+		if n.x < 0:
+			return own
+		var j := n.y * grid_w + n.x
+		if not _slopes(j):
+			return own
+		low = mini(low, steps[j])
+		high = maxi(high, steps[j])
+		total += steps[j]
+	if high - low > SLOPE_STEPS:
+		return own
+	return step_height(total) / 3.0
+
+
+func _slopes(i: int) -> bool:
+	return steps[i] >= 0 and _biomes[i] != MOUNTAIN
+
+
 func _build_mesh() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -142,35 +192,50 @@ func _emit_column(st: SurfaceTool, x: int, y: int) -> void:
 	var lift := step_height(step)
 	var uv := Vector2((float(x) + 0.5) / float(grid_w), (float(y) + 0.5) / float(grid_h))
 	var kind := KIND_TOP + (0.25 if water else 0.0)
-	var light := 0.92 if water else _top_light(x, y)
 
 	# Top: a fan from the center, so the shader knows how far each fragment
-	# sits from each edge (COLOR.ba carries the offset inside the hex).
+	# sits from each edge (COLOR.ba carries the offset inside the hex). Each
+	# facet takes the light its real tilt earns.
 	var mid := _project(center, lift)
 	for k in 6:
+		var k2 := (k + 1) % 6
 		var a := corner(k)
-		var b := corner((k + 1) % 6)
+		var b := corner(k2)
+		var ha := corner_lift[i * 6 + k]
+		var hb := corner_lift[i * 6 + k2]
+		var light := 0.92 if water else _facet_light(a, b, ha - lift, hb - lift)
 		_vertex(st, mid, uv, Color(light, kind, 0.5, 0.5))
-		_vertex(st, _project(center + a, lift), uv, _local(light, kind, a))
-		_vertex(st, _project(center + b, lift), uv, _local(light, kind, b))
+		_vertex(st, _project(center + a, ha), uv, _local(light, kind, a))
+		_vertex(st, _project(center + b, hb), uv, _local(light, kind, b))
 
-	# Camera-facing sides: south-east (corners 2-3) and south-west (3-4).
+	# Camera-facing sides: south-east (corners 2-3) and south-west (3-4),
+	# dropping from this tile's edge to the neighbor's matching edge. A
+	# sloped edge meets its neighbor exactly and draws nothing.
 	for side in [1, 2]:
 		var n := neighbor(x, y, side)
-		var floor_step := step - 3 if n.x < 0 else steps[n.y * grid_w + n.x]
-		if floor_step >= step:
+		var c1: int = side + 1
+		var c2: int = side + 2
+		var top1 := corner_lift[i * 6 + c1]
+		var top2 := corner_lift[i * 6 + c2]
+		var foot1 := step_height(step - 3)
+		var foot2 := foot1
+		if n.x >= 0:
+			var j := n.y * grid_w + n.x
+			# This tile's corner side + 1 is the neighbor's corner side + 5.
+			foot1 = minf(top1, corner_lift[j * 6 + (side + 5) % 6])
+			foot2 = minf(top2, corner_lift[j * 6 + (side + 4) % 6])
+		if top1 - foot1 < 0.5 and top2 - foot2 < 0.5:
 			continue
-		var a := center + corner(side + 1)
-		var b := center + corner(side + 2)
-		var bottom := step_height(floor_step)
+		var a := center + corner(c1)
+		var b := center + corner(c2)
 		var shade := (SIDE_SE if side == 1 else SIDE_SW) * (0.85 if water else 1.0)
 		var top_color := Color(shade, KIND_SIDE, 0.5, 0.5)
 		# The foot of a cliff sits in its own shadow.
 		var foot_color := Color(shade * 0.72, KIND_SIDE, 0.5, 0.5)
-		var ta := _project(a, lift)
-		var tb := _project(b, lift)
-		var fa := _project(a, bottom)
-		var fb := _project(b, bottom)
+		var ta := _project(a, top1)
+		var tb := _project(b, top2)
+		var fa := _project(a, foot1)
+		var fb := _project(b, foot2)
 		_vertex(st, ta, uv, top_color)
 		_vertex(st, tb, uv, top_color)
 		_vertex(st, fb, uv, foot_color)
@@ -179,24 +244,15 @@ func _emit_column(st: SurfaceTool, x: int, y: int) -> void:
 		_vertex(st, fa, uv, foot_color)
 
 
-# A flat top takes the light's vertical share; a tilted one turns toward or
-# away from it by the terrace difference across the hex.
-func _top_light(x: int, y: int) -> float:
-	var here := steps[y * grid_w + x]
-	var east := _step_or(neighbor(x, y, 0), here) - _step_or(neighbor(x, y, 3), here)
-	var south := (
-		(_step_or(neighbor(x, y, 1), here) + _step_or(neighbor(x, y, 2), here))
-		- (_step_or(neighbor(x, y, 4), here) + _step_or(neighbor(x, y, 5), here))
-	)
-	var normal := Vector3(-float(east) * 0.18, -float(south) * 0.12, 1.0).normalized()
-	var facing := maxf(0.0, normal.dot(LIGHT.normalized()))
-	return AMBIENT + DIFFUSE * facing / LIGHT.normalized().z * 0.85
-
-
-func _step_or(n: Vector2i, fallback: int) -> int:
-	if n.x < 0:
-		return fallback
-	return maxi(steps[n.y * grid_w + n.x], 0)
+# One fan facet's light from its real normal: the center at height 0, corners
+# a and b raised by da and db pixels.
+func _facet_light(a: Vector2, b: Vector2, da: float, db: float) -> float:
+	var normal := Vector3(a.x, a.y, da).cross(Vector3(b.x, b.y, db)).normalized()
+	if normal.z < 0.0:
+		normal = -normal
+	var to_light := LIGHT.normalized()
+	# A flat facet lands at the light the flat columns had.
+	return AMBIENT + DIFFUSE * maxf(0.0, normal.dot(to_light)) / to_light.z * 0.85
 
 
 func _local(light: float, kind: float, offset: Vector2) -> Color:
@@ -234,29 +290,35 @@ func tile_at(point: Vector2) -> Vector2i:
 
 # The column's outline on screen: its top hex plus the sides below it.
 func _silhouette(x: int, y: int) -> PackedVector2Array:
+	var i := y * grid_w + x
 	var center := hex_center(x, y)
-	var step := steps[y * grid_w + x]
-	var lift := step_height(step)
-	var foot := step
+	var foot := steps[i]
 	for side in [1, 2]:
 		var n := neighbor(x, y, side)
 		if n.x >= 0:
 			foot = mini(foot, steps[n.y * grid_w + n.x])
-	var drop := step_height(foot)
+	var drop := minf(step_height(foot), _lowest_corner(i))
 	var outline := PackedVector2Array()
 	for k in [4, 5, 0, 1, 2]:
-		outline.append(_project(center + corner(k), lift))
+		outline.append(_project(center + corner(k), corner_lift[i * 6 + k]))
 	outline.append(_project(center + corner(2), drop))
 	outline.append(_project(center + corner(3), drop))
 	outline.append(_project(center + corner(4), drop))
 	return outline
 
 
+func _lowest_corner(i: int) -> float:
+	var low := corner_lift[i * 6]
+	for k in range(1, 6):
+		low = minf(low, corner_lift[i * 6 + k])
+	return low
+
+
 # The top hex's outline, for the selection ring.
 func hex_outline(x: int, y: int) -> PackedVector2Array:
+	var i := y * grid_w + x
 	var center := hex_center(x, y)
-	var lift := step_height(steps[y * grid_w + x])
 	var outline := PackedVector2Array()
 	for k in 7:
-		outline.append(_project(center + corner(k % 6), lift))
+		outline.append(_project(center + corner(k % 6), corner_lift[i * 6 + k % 6]))
 	return outline
