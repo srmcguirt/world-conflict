@@ -74,16 +74,20 @@ pub fn plant_eden(world: &mut World) {
         world.culture_vec[eden * culture::DIMS + k] = *value;
     }
     world.eden = Some(eden as u32);
-    world.cultures.push(culture::Culture {
-        id: 0,
-        parent_id: None,
-        founded_tick: 0,
-        name_seed: world.seed(),
+    let mut culture = culture::Culture::found(
+        0,
+        0,
+        world.seed(),
         centroid,
-        favor: culture::Favor::Chosen,
-        population: EDEN_POPULATION,
-        tiles: 1,
-    });
+        culture::Favor::Chosen,
+        EDEN_POPULATION,
+        1,
+    );
+    let place = crate::names::place_name(&culture, eden);
+    culture
+        .scripture
+        .push(crate::scripture::genesis(&culture.name, &place));
+    world.cultures.push(culture);
     world.split_watch.push(0);
 }
 

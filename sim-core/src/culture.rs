@@ -6,6 +6,8 @@
 //! region's biome target; tiles drift and blend, and a component that drifts
 //! far enough from its parent's centroid becomes a daughter people.
 
+use crate::names::{self, Phonemes};
+use crate::scripture::Verse;
 use crate::world::{GRID_HEIGHT, GRID_WIDTH, World};
 use crate::worldgen::{Biome, latitude_area_factor};
 
@@ -57,6 +59,71 @@ pub struct Culture {
     /// Cached aggregates, refreshed every 10 ticks (design: aggregates).
     pub population: f32,
     pub tiles: u32,
+    /// The people's own name for themselves, e.g. "the Karethi".
+    pub name: String,
+    /// What their language sounds like; names are built from it.
+    pub phonemes: Phonemes,
+    /// Their holy text, oldest first.
+    pub scripture: Vec<Verse>,
+}
+
+impl Culture {
+    /// Founds the first people: its own name, its own sound, an opening verse.
+    pub fn found(
+        id: u16,
+        founded_tick: u64,
+        name_seed: u64,
+        centroid: [f32; DIMS],
+        favor: Favor,
+        population: f32,
+        tiles: u32,
+    ) -> Self {
+        let mut culture = Self {
+            id,
+            parent_id: None,
+            founded_tick,
+            name_seed,
+            centroid,
+            favor,
+            population,
+            tiles,
+            name: String::new(),
+            phonemes: Phonemes::seeded(name_seed),
+            scripture: Vec::new(),
+        };
+        culture.name = names::people_name(&culture);
+        culture
+    }
+
+    /// Founds a daughter people: it inherits the parent's sound and scripture,
+    /// then drifts on its own (design, Split rule).
+    #[allow(clippy::too_many_arguments)]
+    pub fn daughter(
+        parent: &Culture,
+        id: u16,
+        founded_tick: u64,
+        name_seed: u64,
+        centroid: [f32; DIMS],
+        favor: Favor,
+        population: f32,
+        tiles: u32,
+    ) -> Self {
+        let mut culture = Self {
+            id,
+            parent_id: Some(parent.id),
+            founded_tick,
+            name_seed,
+            centroid,
+            favor,
+            population,
+            tiles,
+            name: String::new(),
+            phonemes: parent.phonemes.clone(),
+            scripture: parent.scripture.clone(),
+        };
+        culture.name = names::people_name(&culture);
+        culture
+    }
 }
 
 /// Cost of one migration step into `biome` at `lat_deg`.
@@ -304,16 +371,18 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
     for &i in &part {
         world.culture_id[i] = id;
     }
-    world.cultures.push(Culture {
+    let name_seed = mix(parent_seed ^ world.tick() ^ ((id as u64) << 32));
+    let daughter = Culture::daughter(
+        &world.cultures[parent as usize],
         id,
-        parent_id: Some(parent),
-        founded_tick: world.tick(),
-        name_seed: mix(parent_seed ^ world.tick() ^ ((id as u64) << 32)),
+        world.tick(),
+        name_seed,
         centroid,
         favor,
         population,
-        tiles: part.len() as u32,
-    });
+        part.len() as u32,
+    );
+    world.cultures.push(daughter);
     world.split_watch.push(0);
 }
 

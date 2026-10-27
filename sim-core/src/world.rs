@@ -8,8 +8,13 @@
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
 
+use crate::belief::{self, Belief};
 use crate::culture::{self, Culture, NO_CULTURE};
 use crate::demography;
+use crate::names;
+use crate::notables::{self, Budget, Legend, Notable, Role};
+use crate::powers::{self, Action, PendingOutcome, Power};
+use crate::scripture::Verse;
 use crate::worldgen::{self, Biome, GeneratedWorld};
 
 /// Milestone 1 grid: an equirectangular tile map that wraps east to west.
@@ -89,6 +94,28 @@ pub struct World {
     /// Demography's own RNG stream, derived from the world seed (design:
     /// every system gets its own seeded RNG).
     pub(crate) rng: Pcg64,
+    /// Untouched carrying capacity, before blessings multiply it.
+    pub base_capacity: Vec<f32>,
+    /// Tick a blessing on this tile expires; 0 means unblessed.
+    pub blessed_until: Vec<u64>,
+    /// Population ten ticks ago, for the witness rule's expected trend.
+    pub(crate) population_10_ago: Vec<f32>,
+    /// Belief per tile, six axes each (design, Belief model).
+    pub belief: Vec<f32>,
+    /// Witness windows still open.
+    pub(crate) pending: Vec<PendingOutcome>,
+    /// Queued player actions, in arrival order (design, Player actions).
+    pub(crate) queue: Vec<Action>,
+    /// The action log: every action that ever applied, for replay.
+    actions: Vec<Action>,
+    /// Living individuals.
+    pub(crate) notables: Vec<Notable>,
+    /// Records of individuals who are gone but still cited.
+    pub(crate) legends: Vec<Legend>,
+    /// Next individual id.
+    pub(crate) next_notable_id: u32,
+    /// Beasts wandering the map.
+    pub(crate) beasts: Vec<Beast>,
 }
 
 impl World {
@@ -101,6 +128,7 @@ impl World {
             biome,
             carrying_capacity,
         } = worldgen::generate(seed);
+        let base_capacity = carrying_capacity.clone();
 
         let tiles = GRID_WIDTH * GRID_HEIGHT;
         let mut world = Self {
@@ -119,6 +147,17 @@ impl World {
             split_watch: Vec::new(),
             eden: None,
             rng: Pcg64::seed_from_u64(seed ^ 0xD3A0_6D3D_0000_0001),
+            base_capacity,
+            blessed_until: vec![0; tiles],
+            population_10_ago: vec![0.0; tiles],
+            belief: tiles_flat_belief(tiles),
+            pending: Vec::new(),
+            queue: Vec::new(),
+            actions: Vec::new(),
+            notables: Vec::new(),
+            legends: Vec::new(),
+            next_notable_id: 1,
+            beasts: Vec::new(),
         };
         demography::plant_eden(&mut world);
         world
@@ -183,11 +222,307 @@ impl World {
                 }
                 bytes
             }
-            // Traits, belief, polities and languages arrive in Milestones 4-5;
-            // until then every mode paints the biome overlay.
-            Overlay::Traits | Overlay::Belief | Overlay::Polity | Overlay::Language => {
+            // What each tile's people believe about the god.
+            Overlay::Belief => {
+                let mut bytes = Vec::with_capacity(self.biome.len() * 4);
+                for tile in 0..self.biome.len() {
+                    let [r, g, b] = self.belief_of(tile).color();
+                    bytes.extend_from_slice(&[r, g, b, 255]);
+                }
+                bytes
+            }
+            // Traits, polities and languages arrive in Milestones 4-5; until
+            // then those modes paint the biome overlay.
+            Overlay::Traits | Overlay::Polity | Overlay::Language => {
                 worldgen::overlay_biome(&self.biome)
             }
+        }
+    }
+
+    /// Queues a power at `(x, y)`; it applies at the start of the next tick
+    /// (design, Player actions are queued).
+    pub fn queue_power(&mut self, power: Power, x: usize, y: usize) {
+        self.queue.push(Action {
+            tick: self.tick + 1,
+            power,
+            x: x % GRID_WIDTH,
+            y: y.min(GRID_HEIGHT - 1),
+        });
+    }
+
+    /// Every action that has applied, in order: the replay log.
+    pub fn actions(&self) -> &[Action] {
+        &self.actions
+    }
+
+    /// Living individuals.
+    pub fn notables(&self) -> &[Notable] {
+        &self.notables
+    }
+
+    /// Living witnesses.
+    pub fn witnesses(&self) -> Vec<Notable> {
+        self.notables
+            .iter()
+            .filter(|notable| notable.role == Role::Witness)
+            .cloned()
+            .collect()
+    }
+
+    /// Records of the dead who are still cited.
+    pub fn legends(&self) -> &[Legend] {
+        &self.legends
+    }
+
+    /// Whether a people is the god's own.
+    pub fn is_chosen(&self, culture_id: u16) -> bool {
+        self.cultures
+            .get(culture_id as usize)
+            .is_some_and(|culture| culture.favor == culture::Favor::Chosen)
+    }
+
+    /// This tile's people's belief.
+    pub fn belief_of(&self, tile: usize) -> Belief {
+        let start = tile * belief::AXES;
+        Belief::from_axes(&self.belief[start..start + belief::AXES])
+    }
+
+    /// Writes a tile's belief back.
+    pub fn set_belief(&mut self, tile: usize, value: Belief) {
+        let start = tile * belief::AXES;
+        self.belief[start..start + belief::AXES].copy_from_slice(&value.to_axes());
+    }
+
+    /// The Δpopulation% this tile's own 10-tick trend predicts for a 5-tick
+    /// window (design, Witness rule).
+    pub fn expected_growth(&self, tile: usize) -> f32 {
+        let then = self.population_10_ago[tile];
+        if then <= 0.0 {
+            return 0.0;
+        }
+        (self.population[tile] / then - 1.0) * 0.5
+    }
+
+    /// Promotes the person on `tile` to witness, returning their id.
+    ///
+    /// Enforces the witness and culture budgets: the lowest-salience member of
+    /// a full budget becomes a legend (design, Individual budgets).
+    pub fn promote_witness(&mut self, tile: usize) -> Option<u32> {
+        let culture_id = self.culture_id[tile];
+        let culture = self.cultures.get(culture_id as usize)?;
+        let name = names::person_name(culture, self.next_notable_id);
+        let role = Role::Witness;
+
+        let budget = if culture.favor == culture::Favor::Chosen {
+            Budget::Chosen
+        } else {
+            Budget::Other
+        };
+        self.evict_for(budget, culture_id);
+
+        let id = self.next_notable_id;
+        self.next_notable_id += 1;
+        self.notables.push(Notable {
+            id,
+            culture_id,
+            name,
+            tile: tile as u32,
+            born_tick: self.tick,
+            role,
+            salience: 1.0,
+        });
+        Some(id)
+    }
+
+    /// Writes a witness's verse into their people's scripture.
+    pub fn write_verse(&mut self, power: Power, witness_id: u32) {
+        let Some((culture_id, verse)) = powers::verse_for(self, power, witness_id) else {
+            return;
+        };
+        if let Some(culture) = self.cultures.get_mut(culture_id as usize) {
+            culture.scripture.push(verse);
+        }
+    }
+
+    /// A people's scripture, newest first, already rendered (design: GDScript
+    /// only displays text Rust hands it).
+    pub fn scripture_text(&self, culture_id: u16, from: usize, count: usize) -> Vec<String> {
+        let Some(culture) = self.cultures.get(culture_id as usize) else {
+            return Vec::new();
+        };
+        culture
+            .scripture
+            .iter()
+            .rev()
+            .skip(from)
+            .take(count)
+            .map(Verse::render)
+            .collect()
+    }
+
+    /// Lifts or sinks land, then reclassifies it.
+    pub fn shift_elevation(&mut self, tile: usize, delta: f32) {
+        self.elevation[tile] = (self.elevation[tile] + delta).clamp(0.0, 1.0);
+        self.recompute_tile(tile);
+    }
+
+    /// Replaces a tile's biome and its carrying capacity.
+    pub fn set_biome(&mut self, tile: usize, biome: Biome) {
+        let lat = worldgen::latitude_deg(tile / GRID_WIDTH);
+        self.biome[tile] = biome;
+        self.base_capacity[tile] = worldgen::capacity_for(biome, lat);
+        self.refresh_capacity(tile);
+    }
+
+    /// Blesses a tile: +25% carrying capacity for ten years.
+    pub fn bless(&mut self, tile: usize) {
+        self.blessed_until[tile] = self.tick + 10;
+        self.refresh_capacity(tile);
+    }
+
+    /// A meteor: a crater, most of the people dead, the land poorer.
+    pub fn meteor(&mut self, tile: usize) {
+        self.population[tile] *= 0.15;
+        self.elevation[tile] = (self.elevation[tile] - 0.10).max(0.0);
+        self.recompute_tile(tile);
+        self.base_capacity[tile] *= 0.70;
+        self.refresh_capacity(tile);
+    }
+
+    /// Sets beasts loose on a tile for twenty years.
+    pub fn spawn_beasts(&mut self, tile: usize) {
+        self.beasts.push(Beast {
+            tile,
+            until: self.tick + 20,
+        });
+    }
+
+    /// Reclassifies a tile from its elevation, moisture and temperature.
+    pub(crate) fn recompute_tile(&mut self, tile: usize) {
+        let lat = worldgen::latitude_deg(tile / GRID_WIDTH);
+        let biome = if lat.abs() > worldgen::ICE_LATITUDE_DEG {
+            Biome::Ice
+        } else {
+            worldgen::classify(
+                self.elevation[tile],
+                self.moisture[tile],
+                self.temperature[tile],
+            )
+        };
+        self.biome[tile] = biome;
+        self.base_capacity[tile] = worldgen::capacity_for(biome, lat);
+        self.refresh_capacity(tile);
+    }
+
+    /// Recomputes effective capacity from the base and any blessing.
+    fn refresh_capacity(&mut self, tile: usize) {
+        let multiplier = if self.blessed_until[tile] > self.tick {
+            1.25
+        } else {
+            1.0
+        };
+        self.carrying_capacity[tile] = self.base_capacity[tile] * multiplier;
+        if self.population[tile] > self.carrying_capacity[tile] {
+            self.population[tile] = self.carrying_capacity[tile];
+        }
+    }
+
+    /// Applies every action queued for this tick, in arrival order.
+    fn apply_queued_actions(&mut self) {
+        let due: Vec<Action> = self
+            .queue
+            .iter()
+            .copied()
+            .filter(|action| action.tick <= self.tick)
+            .collect();
+        self.queue.retain(|action| action.tick > self.tick);
+        for action in due {
+            powers::apply(self, action.power, action.x, action.y);
+            self.actions.push(action);
+        }
+    }
+
+    /// Beasts thin the local population until they move on.
+    fn tick_beasts(&mut self) {
+        for beast in &self.beasts {
+            if beast.until > self.tick {
+                self.population[beast.tile] *= 0.82;
+            }
+        }
+        let tick = self.tick;
+        self.beasts.retain(|beast| beast.until > tick);
+    }
+
+    /// Ends blessings whose ten years are up.
+    fn tick_blessings(&mut self) {
+        for tile in 0..self.blessed_until.len() {
+            if self.blessed_until[tile] != 0 && self.tick >= self.blessed_until[tile] {
+                self.blessed_until[tile] = 0;
+                self.carrying_capacity[tile] = self.base_capacity[tile];
+            }
+        }
+    }
+
+    /// Demotes witnesses nobody elevated within their tenure (design).
+    fn demote_old_witnesses(&mut self) {
+        let tick = self.tick;
+        let mut kept = Vec::with_capacity(self.notables.len());
+        for notable in self.notables.drain(..) {
+            if notable.role == Role::Witness && tick >= notable.born_tick + notables::WITNESS_TENURE
+            {
+                self.legends.push(Legend {
+                    id: notable.id,
+                    culture_id: notable.culture_id,
+                    name: notable.name,
+                    born_tick: notable.born_tick,
+                    died_tick: tick,
+                    role: notable.role,
+                });
+            } else {
+                kept.push(notable);
+            }
+        }
+        self.notables = kept;
+    }
+
+    /// Evicts the lowest-salience member of a full budget to legend.
+    fn evict_for(&mut self, budget: Budget, culture_id: u16) {
+        let mut members: Vec<usize> = self
+            .notables
+            .iter()
+            .enumerate()
+            .filter(|(_, notable)| match budget {
+                Budget::Witness => true,
+                Budget::Chosen => notable.culture_id == culture_id,
+                Budget::Other => notable.culture_id == culture_id,
+            })
+            .map(|(index, _)| index)
+            .collect();
+        let witnesses = self.witnesses().len();
+        let full = match budget {
+            Budget::Witness => witnesses >= notables::WITNESS_BUDGET,
+            Budget::Chosen => members.len() >= notables::CHOSEN_BUDGET,
+            Budget::Other => members.len() >= notables::OTHER_BUDGET,
+        };
+        if !full {
+            return;
+        }
+        members.sort_by(|&a, &b| {
+            self.notables[a]
+                .salience
+                .total_cmp(&self.notables[b].salience)
+                .then(a.cmp(&b))
+        });
+        if let Some(&index) = members.first() {
+            let evicted = self.notables.remove(index);
+            self.legends.push(Legend {
+                id: evicted.id,
+                culture_id: evicted.culture_id,
+                name: evicted.name,
+                born_tick: evicted.born_tick,
+                died_tick: self.tick,
+                role: evicted.role,
+            });
         }
     }
 
@@ -208,16 +543,24 @@ impl World {
     /// Systems arrive milestone by milestone (design, Milestones); the order is
     /// fixed from day one so replays stay comparable across milestones.
     fn tick_systems(&mut self) {
+        // Player actions first, in arrival order, before Climate (design).
+        self.apply_queued_actions();
+        self.tick_beasts();
+        self.tick_blessings();
+
         // Climate (rare) -> Population -> Migration -> Drift/Blend -> Traits
         //   -> Belief -> Polity -> Tech -> War
         demography::tick_population(self);
         demography::tick_migration(self);
         demography::tick_drift(self);
         demography::sync_membership(self);
+        powers::close_windows(self);
+        self.demote_old_witnesses();
 
         // Aggregates refresh every 10 ticks; splits and schisms check every 25
         // (design, Simulation contracts).
         if self.tick.is_multiple_of(10) {
+            self.population_10_ago.copy_from_slice(&self.population);
             culture::refresh_aggregates(self);
         }
         if self.tick.is_multiple_of(25) {
@@ -288,4 +631,21 @@ mod tests {
             );
         }
     }
+}
+
+/// A beast that hunts the people of one tile for a while.
+#[derive(Copy, Clone, Debug)]
+pub struct Beast {
+    pub tile: usize,
+    pub until: u64,
+}
+
+/// Belief field initialization: every tile starts at [`Belief::START`].
+fn tiles_flat_belief(tiles: usize) -> Vec<f32> {
+    let start = Belief::START.to_axes();
+    let mut field = Vec::with_capacity(tiles * belief::AXES);
+    for _ in 0..tiles {
+        field.extend_from_slice(&start);
+    }
+    field
 }

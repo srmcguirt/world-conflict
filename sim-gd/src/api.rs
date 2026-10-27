@@ -10,6 +10,7 @@ use std::panic::{self, AssertUnwindSafe};
 
 use godot::prelude::*;
 use sim_core::World;
+use sim_core::powers::Power;
 use sim_core::world::{GRID_HEIGHT, GRID_WIDTH, Overlay};
 
 /// Root simulation node. One per game session, added to the scene tree.
@@ -98,6 +99,87 @@ impl Sim {
     #[func]
     fn culture_count(&self) -> i64 {
         self.world.cultures().len() as i64
+    }
+
+    /// The tile humanity started on, for the H home key (design D2).
+    #[func]
+    fn eden_tile(&self) -> Vector2i {
+        match self.world.eden_tile() {
+            Some(tile) => Vector2i::new((tile % GRID_WIDTH) as i32, (tile / GRID_WIDTH) as i32),
+            None => Vector2i::new(-1, -1),
+        }
+    }
+
+    /// The god's own people, or -1 if the world has none.
+    #[func]
+    fn chosen_culture(&self) -> i64 {
+        self.world
+            .cultures()
+            .iter()
+            .find(|culture| culture.favor == sim_core::culture::Favor::Chosen)
+            .map(|culture| culture.id as i64)
+            .unwrap_or(-1)
+    }
+
+    /// A people's name, e.g. "the Karethi".
+    #[func]
+    fn culture_name(&self, id: i64) -> GString {
+        self.world
+            .cultures()
+            .get(id as usize)
+            .map(|culture| GString::from(culture.name.as_str()))
+            .unwrap_or_default()
+    }
+
+    /// Queues a power from the toolbar. It applies on the next sim-year.
+    #[func]
+    fn cast_power(&mut self, index: i64, x: i64, y: i64) {
+        self.guarded(|world| {
+            world.queue_power(
+                Power::from_index(index),
+                x.max(0) as usize,
+                y.max(0) as usize,
+            );
+        });
+    }
+
+    /// A people's scripture, newest first, already rendered by Rust.
+    #[func]
+    fn scripture(&self, culture_id: i64, from: i64, count: i64) -> PackedStringArray {
+        let lines = self.world.scripture_text(
+            culture_id.max(0) as u16,
+            from.max(0) as usize,
+            count.clamp(1, 200) as usize,
+        );
+        let mut array = PackedStringArray::new();
+        for line in lines {
+            array.push(&GString::from(line.as_str()));
+        }
+        array
+    }
+
+    /// How many witnesses are alive, and the newest witness's name.
+    #[func]
+    fn witness_count(&self) -> i64 {
+        self.world.witnesses().len() as i64
+    }
+
+    /// The newest witness as "name, of the people" — who saw what you did.
+    #[func]
+    fn newest_witness(&self) -> GString {
+        let witnesses = self.world.witnesses();
+        match witnesses.last() {
+            Some(witness) => {
+                let people = self
+                    .world
+                    .cultures()
+                    .get(witness.culture_id as usize)
+                    .map(|culture| culture.name.clone())
+                    .unwrap_or_default();
+                GString::from(format!("{}, of the {}", witness.name, people).as_str())
+            }
+            None => GString::new(),
+        }
     }
 }
 

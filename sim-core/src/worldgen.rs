@@ -139,6 +139,11 @@ pub fn settleable(biome: Biome) -> bool {
     matches!(biome, Biome::Grassland | Biome::Forest | Biome::Beach)
 }
 
+/// People a tile of this biome can carry at this latitude.
+pub fn capacity_for(biome: Biome, lat_deg: f32) -> f32 {
+    base_capacity(biome) * latitude_area_factor(lat_deg)
+}
+
 /// Flat RGB for a biome, shared by the biome and culture overlays.
 pub fn biome_color(biome: Biome) -> [u8; 3] {
     match biome {

@@ -5,6 +5,7 @@
 //! ```text
 //! cargo run -p sim-core --bin worldsim -- --seed 1 --years 2000 --out run.png
 //! cargo run -p sim-core --bin worldsim -- --years 2000 --overlay biome --out map.png
+//! cargo run -p sim-core --bin worldsim -- --years 300 --cast 4 --after 10 --overlay belief
 //! ```
 //!
 //! Tuning metrics: settled tiles and population over time, culture count,
@@ -31,6 +32,8 @@ fn main() -> ExitCode {
     let mut trace = 0_u32;
     let mut out = None::<String>;
     let mut overlay = Overlay::Culture;
+    let mut cast: Option<i64> = None;
+    let mut after = 0_u32;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -40,12 +43,15 @@ fn main() -> ExitCode {
             "--years" => years = value().and_then(|v| v.parse().ok()).unwrap_or(years),
             "--trace" => trace = value().and_then(|v| v.parse().ok()).unwrap_or(trace),
             "--out" => out = value(),
+            "--cast" => cast = value().and_then(|v| v.parse().ok()),
+            "--after" => after = value().and_then(|v| v.parse().ok()).unwrap_or(after),
             "--overlay" => {
                 overlay = match value().as_deref() {
                     Some("biome") => Overlay::Biome,
                     Some("culture") | None => Overlay::Culture,
+                    Some("belief") => Overlay::Belief,
                     Some(other) => {
-                        eprintln!("unknown overlay: {other} (biome|culture)");
+                        eprintln!("unknown overlay: {other} (biome|culture|belief)");
                         return ExitCode::FAILURE;
                     }
                 }
@@ -70,6 +76,16 @@ fn main() -> ExitCode {
         }
     } else {
         world.step(years);
+    }
+
+    if let Some(index) = cast {
+        let eden = world.eden_tile().expect("Eden exists");
+        world.queue_power(
+            sim_core::powers::Power::from_index(index),
+            eden % GRID_WIDTH,
+            eden / GRID_WIDTH,
+        );
+        world.step(after.max(1));
     }
 
     print_biomes(&world);

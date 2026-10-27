@@ -11,8 +11,13 @@
 //! - no `std` hash collections (R9, enforced by clippy `disallowed-types`);
 //! - transcendental math through `libm` (design, Determinism scope).
 
+pub mod belief;
 pub mod culture;
 pub mod demography;
+pub mod names;
+pub mod notables;
+pub mod powers;
+pub mod scripture;
 pub mod world;
 pub mod worldgen;
 
