@@ -5,6 +5,10 @@
 //! These tests are the Milestone 1 "done when" gate in executable form: a
 //! 2,000-year run must show three or more distinct peoples separated by
 //! terrain.
+#![expect(
+    clippy::float_cmp,
+    reason = "these contracts compare exact values: untouched land, infinite cost, symmetric tables"
+)]
 
 use sim_core::culture::{self, Favor, NO_CULTURE};
 use sim_core::world::{GRID_HEIGHT, GRID_WIDTH, Overlay, World};
@@ -242,8 +246,8 @@ fn culture_overlay_lights_settled_tiles_and_desaturates_the_rest() {
     assert_ne!(settled_px, unsettled_px, "Eden is lit, the frontier is not");
 
     let spread = |px: &[u8]| {
-        let max = *px.iter().max().unwrap() as i32;
-        let min = *px.iter().min().unwrap() as i32;
+        let max = i32::from(*px.iter().max().unwrap());
+        let min = i32::from(*px.iter().min().unwrap());
         max - min
     };
     assert!(

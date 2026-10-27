@@ -150,7 +150,7 @@ fn a_cold_adapted_people_hold_the_north() {
 
     // One tile differs, so the worlds stay identical everywhere else and the
     // comparison stays surgical.
-    let start = tile * traits::TRAITS;
+    let start = tile * TRAITS;
     let mut plain = adapted.clone();
     adapted.traits[start + traits::COLD] = 1.0;
     plain.traits[start + traits::COLD] = 0.0;

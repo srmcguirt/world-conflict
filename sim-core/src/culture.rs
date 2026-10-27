@@ -130,7 +130,10 @@ impl Culture {
 
     /// Founds a daughter people: it inherits the parent's sound and scripture,
     /// then drifts on its own (design, Split rule).
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a daughter people is founded from every one of these at once"
+    )]
     pub fn daughter(
         parent: &Culture,
         id: u16,
@@ -461,7 +464,7 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
     for &i in &part {
         world.culture_id[i] = id;
     }
-    let name_seed = mix(parent_seed ^ world.tick() ^ ((id as u64) << 32));
+    let name_seed = mix(parent_seed ^ world.tick() ^ (u64::from(id) << 32));
     let daughter = Culture::daughter(
         &world.cultures[parent as usize],
         id,
@@ -485,7 +488,7 @@ fn mix(mut z: u64) -> u64 {
 /// A color for a culture's overlay: golden-angle hue steps, so ids stay visibly
 /// distinct (design, Map states).
 pub fn color(id: u16) -> [u8; 3] {
-    let hue = (id as f32 * 0.618_034).fract();
+    let hue = (f32::from(id) * 0.618_034).fract();
     hsv_rgb(hue, 0.62, 0.95)
 }
 
@@ -493,15 +496,19 @@ pub fn color(id: u16) -> [u8; 3] {
 /// states: unsettled land desaturated).
 pub fn unsettled_color(biome: Biome) -> [u8; 3] {
     let [r, g, b] = crate::worldgen::biome_color(biome);
-    let gray = 0.30 * r as f32 + 0.59 * g as f32 + 0.11 * b as f32;
+    let gray = 0.30 * f32::from(r) + 0.59 * f32::from(g) + 0.11 * f32::from(b);
     [
-        (r as f32 * 0.25 + gray * 0.75) as u8,
-        (g as f32 * 0.25 + gray * 0.75) as u8,
-        (b as f32 * 0.25 + gray * 0.75) as u8,
+        (f32::from(r) * 0.25 + gray * 0.75) as u8,
+        (f32::from(g) * 0.25 + gray * 0.75) as u8,
+        (f32::from(b) * 0.25 + gray * 0.75) as u8,
     ]
 }
 
 /// HSV (h in [0, 1)) to RGB, sector math only, no transcendentals.
+#[expect(
+    clippy::many_single_char_names,
+    reason = "standard HSV-to-RGB notation"
+)]
 fn hsv_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
     let h6 = h * 6.0;
     let sector = h6.floor() as i32 % 6;

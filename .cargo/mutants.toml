@@ -1,0 +1,5 @@
+# cargo-mutants: break the code on purpose and check that a test notices.
+# Run on what you changed: `cargo mutants -p sim-core --file sim-core/src/<file>.rs`
+test_package = ["sim-core"]
+# The sim tests run whole worlds; debug builds are too slow for mutation runs.
+profile = "mutants"

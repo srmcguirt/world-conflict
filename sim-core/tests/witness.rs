@@ -4,6 +4,10 @@
 //!
 //! The milestone's own gate is here too: smite something, then read what
 //! someone believed you meant by it.
+#![expect(
+    clippy::float_cmp,
+    reason = "these contracts compare exact values: untouched land, infinite cost, symmetric tables"
+)]
 
 use sim_core::powers::Power;
 use sim_core::world::{GRID_WIDTH, World};

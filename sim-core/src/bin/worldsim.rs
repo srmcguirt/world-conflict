@@ -18,6 +18,11 @@
 //! is not visible to `[[bin]]` targets, and a regular `image` dependency would
 //! be linked into the shipped dylib. The PNG format is frozen, so this is a
 //! stable ~60 lines.
+#![expect(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "a command-line tool reports on stdout and stderr"
+)]
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -73,7 +78,7 @@ fn main() -> ExitCode {
             "{:>6}  {:>7}  {:>9}  {:>8}  {:>4}",
             "year", "settled", "people", "largest", "cultures"
         );
-        while world.tick() < years as u64 {
+        while world.tick() < u64::from(years) {
             let chunk = trace.min(years - world.tick() as u32);
             world.step(chunk);
             print_progress(&world);
@@ -165,9 +170,7 @@ fn print_biomes(world: &World) {
 
 fn print_cultures(world: &World) {
     let orphans: Vec<usize> = (0..world.population.len())
-        .filter(|&i| {
-            world.population[i] >= 1.0 && world.culture_id[i] == sim_core::culture::NO_CULTURE
-        })
+        .filter(|&i| world.population[i] >= 1.0 && world.culture_id[i] == culture::NO_CULTURE)
         .collect();
     if !orphans.is_empty() {
         println!("orphaned settlements: {} e.g. {orphans:?}", orphans.len());
@@ -195,7 +198,7 @@ fn print_cultures(world: &World) {
             culture.mean_skin,
         );
         let parts = culture::components(world, culture.id);
-        let sizes: Vec<usize> = parts.iter().map(|part| part.len()).collect();
+        let sizes: Vec<usize> = parts.iter().map(Vec::len).collect();
         let mut furthest = 0.0_f32;
         for part in &parts {
             let mean = culture::weighted_mean(world, part);
@@ -244,7 +247,7 @@ fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> std::io::Resu
     ihdr.extend_from_slice(&width.to_be_bytes());
     ihdr.extend_from_slice(&height.to_be_bytes());
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
-    write_chunk(&mut out, b"IHDR", &ihdr);
+    write_chunk(&mut out, *b"IHDR", &ihdr);
 
     // Raw image data: one filter byte (None) per scanline.
     let stride = width as usize * 4;
@@ -271,16 +274,16 @@ fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> std::io::Resu
         }
     }
     zlib.extend_from_slice(&adler32(&raw).to_be_bytes());
-    write_chunk(&mut out, b"IDAT", &zlib);
+    write_chunk(&mut out, *b"IDAT", &zlib);
 
-    write_chunk(&mut out, b"IEND", &[]);
+    write_chunk(&mut out, *b"IEND", &[]);
     std::fs::write(path, out)
 }
 
 /// One PNG chunk: length, type, data, CRC-32 over type + data.
-fn write_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+fn write_chunk(out: &mut Vec<u8>, kind: [u8; 4], data: &[u8]) {
     out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-    out.extend_from_slice(kind);
+    out.extend_from_slice(&kind);
     out.extend_from_slice(data);
     let mut crc_input = kind.to_vec();
     crc_input.extend_from_slice(data);
@@ -290,7 +293,7 @@ fn write_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
 fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0xFFFF_FFFF_u32;
     for &byte in data {
-        crc ^= byte as u32;
+        crc ^= u32::from(byte);
         for _ in 0..8 {
             crc = if crc & 1 != 0 {
                 (crc >> 1) ^ 0xEDB8_8320
@@ -305,7 +308,7 @@ fn crc32(data: &[u8]) -> u32 {
 fn adler32(data: &[u8]) -> u32 {
     let (mut a, mut b) = (1_u32, 0_u32);
     for &byte in data {
-        a = (a + byte as u32) % 65521;
+        a = (a + u32::from(byte)) % 65521;
         b = (b + a) % 65521;
     }
     (b << 16) | a

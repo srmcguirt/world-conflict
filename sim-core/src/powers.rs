@@ -40,8 +40,7 @@ impl Power {
         match self {
             Power::Meteor => 6,
             Power::Tornado => 3,
-            Power::Raise | Power::Lower => 2,
-            Power::Spawn => 2,
+            Power::Raise | Power::Lower | Power::Spawn => 2,
             Power::Bless | Power::Paint(_) => 1,
         }
     }
@@ -132,7 +131,7 @@ pub fn apply(world: &mut World, power: Power, cx: usize, cy: usize) {
     let footprint = tiles_around(cx, cy, power.footprint_radius());
     let watched: Vec<usize> = {
         let footprint: Vec<usize> = footprint.clone();
-        let mut all = footprint.clone();
+        let mut all = footprint;
         for tile in tiles_around(cx, cy, power.visibility_radius()) {
             if !all.contains(&tile) {
                 all.push(tile);

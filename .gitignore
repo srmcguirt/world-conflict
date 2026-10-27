@@ -11,3 +11,6 @@ android/
 # Built GDExtension libraries (rebuilt by `cargo build`, not committed)
 *.dylib
 *.so
+
+# cargo-mutants reports
+mutants.out*/

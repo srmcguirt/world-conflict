@@ -43,10 +43,10 @@ impl Phonemes {
         }
         // Every language needs something to build a syllable from.
         if consonants.len() < 3 {
-            consonants.extend(["k", "r", "n"].iter().map(|s| s.to_string()));
+            consonants.extend(["k", "r", "n"].iter().map(ToString::to_string));
         }
         if vowels.is_empty() {
-            vowels.extend(["a", "i", "o"].iter().map(|s| s.to_string()));
+            vowels.extend(["a", "i", "o"].iter().map(ToString::to_string));
         }
         Self { consonants, vowels }
     }
@@ -122,7 +122,7 @@ fn capitalize(word: &str) -> String {
 /// Deterministic integer hash (splitmix64 finalizer).
 fn draw(seed: u64, index: u32) -> u32 {
     let mut z = seed
-        .wrapping_add((index as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15))
+        .wrapping_add(u64::from(index).wrapping_mul(0x9E37_79B9_7F4A_7C15))
         .wrapping_add(0x1234_5678_9ABC_DEF0);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);

@@ -65,6 +65,7 @@ impl Belief {
     ///
     /// `score` is the witness rule's outcome, already clamped to [-1, 1]. The
     /// dead zone is applied by the caller: |score| < 0.05 is "no effect".
+    #[must_use]
     pub fn witness(mut self, score: f32) -> Self {
         if score < 0.0 {
             // A negative outcome raises wrathful and capricious (design).
@@ -81,6 +82,7 @@ impl Belief {
     }
 
     /// Witnessing with no effect lowers `absent` (design, Witness rule).
+    #[must_use]
     pub fn witness_silence(mut self) -> Self {
         self.absent = (self.absent - 0.01).max(0.0);
         self
@@ -94,8 +96,7 @@ impl Belief {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.total_cmp(b.1))
-            .map(|(axis, value)| (axis, *value))
-            .unwrap_or((ABSENT, 0.5));
+            .map_or((ABSENT, 0.5), |(axis, value)| (axis, *value));
         let hue = match axis {
             WRATHFUL => [196, 62, 48],
             BENEVOLENT => [217, 168, 69],
@@ -119,8 +120,7 @@ impl Belief {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.total_cmp(b.1))
-            .map(|(axis, _)| axis)
-            .unwrap_or(ABSENT)
+            .map_or(ABSENT, |(axis, _)| axis)
     }
 }
 

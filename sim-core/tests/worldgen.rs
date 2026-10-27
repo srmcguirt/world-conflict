@@ -3,6 +3,10 @@
 //! Written before the implementation (TDD). These lock the design contracts:
 //! same seed -> same world, latitude-driven temperature and area correction,
 //! permanent ice above ±75°, biome classification table, and the RGBA overlay.
+#![expect(
+    clippy::float_cmp,
+    reason = "these contracts compare exact values: untouched land, infinite cost, symmetric tables"
+)]
 
 use sim_core::world::{GRID_HEIGHT, GRID_WIDTH};
 use sim_core::worldgen::{
@@ -154,7 +158,7 @@ fn overlay_is_rgba_and_colors_read_as_their_biome() {
                 Biome::Forest => assert!(g > r && g > b, "forest must read green"),
                 Biome::Grassland => assert!(g >= r && g >= b, "grassland reads green-ish"),
                 Biome::Mountain => {
-                    assert!(r.abs_diff(g) < 24 && g.abs_diff(b) < 24, "mountain is grey")
+                    assert!(r.abs_diff(g) < 24 && g.abs_diff(b) < 24, "mountain is grey");
                 }
                 Biome::Beach | Biome::Ice => {}
             }

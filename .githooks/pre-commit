@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Installed by `git config core.hooksPath .githooks` (see AGENTS.md).
+# Bypassing it with --no-verify is against the repo rules.
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+"$root/scripts/slop-guard.sh"
+"$root/scripts/check.sh" --fast
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --no-banner
+fi

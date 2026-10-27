@@ -10,7 +10,7 @@ use libm::cosf;
 
 use crate::world::{GRID_HEIGHT, GRID_WIDTH};
 
-/// fBm octaves. Scale doubles each octave and always divides GRID_WIDTH
+/// fBm octaves. Scale doubles each octave and always divides `GRID_WIDTH`
 /// (160 = 2^5 * 5, so scales 4..32), so the map wraps seamlessly east to west.
 const OCTAVES: u32 = 4;
 
@@ -189,7 +189,7 @@ fn fbm(tx: i32, ty: i32, seed: u64) -> f32 {
     let mut amplitude = 0.5;
     let mut scale = FIRST_SCALE;
     for octave in 0..OCTAVES {
-        sum += amplitude * lattice_noise(tx, ty, scale, seed.wrapping_add(octave as u64));
+        sum += amplitude * lattice_noise(tx, ty, scale, seed.wrapping_add(u64::from(octave)));
         norm += amplitude;
         amplitude *= 0.5;
         scale *= 2;
@@ -237,8 +237,8 @@ fn contrast(value: f32, amount: f32) -> f32 {
 /// Deterministic 2D integer hash (splitmix64 finalizer). Integer math only.
 fn hash2(x: i32, y: i32, seed: u64) -> u32 {
     let mut h = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    h = mix(h ^ (x as i64 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
-    h = mix(h ^ (y as i64 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
+    h = mix(h ^ (i64::from(x) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    h = mix(h ^ (i64::from(y) as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F));
     (h >> 32) as u32
 }
 

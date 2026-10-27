@@ -60,8 +60,8 @@ impl Overlay {
 /// The simulation world: every mutable field the sim owns.
 ///
 /// Rendering never writes here; the sim never reads rendering state. Fields are
-/// one `Vec` per tile attribute, row-major: index = y * GRID_WIDTH + x
-/// (design, Architecture -> WorldState).
+/// one `Vec` per tile attribute, row-major: index = y * `GRID_WIDTH` + x
+/// (design, Architecture -> `WorldState`).
 #[derive(Clone)]
 pub struct World {
     /// World seed. Same seed + same actions => same history (design, Determinism).
@@ -219,6 +219,10 @@ impl World {
     }
 
     /// RGBA bytes for the map image, one 4-byte pixel per tile.
+    #[expect(
+        clippy::match_same_arms,
+        reason = "Polity and Language keep their own arm until their milestones paint them"
+    )]
     pub fn paint_overlay(&self, mode: Overlay) -> Vec<u8> {
         match mode {
             Overlay::Biome => worldgen::overlay_biome(&self.biome),
@@ -257,8 +261,8 @@ impl World {
                     } else {
                         let altitude = self.traits[start + traits::ALTITUDE];
                         for (mix, slate) in rgb.iter_mut().zip([104_u8, 116, 128]) {
-                            *mix = (*mix as f32 * (1.0 - altitude * 0.35)
-                                + slate as f32 * altitude * 0.35)
+                            *mix = (f32::from(*mix) * (1.0 - altitude * 0.35)
+                                + f32::from(slate) * altitude * 0.35)
                                 as u8;
                         }
                     }
@@ -427,7 +431,7 @@ impl World {
         self.cultures[culture_id as usize].scripture.push(verse);
     }
 
-    /// A people's scripture, newest first, already rendered (design: GDScript
+    /// A people's scripture, newest first, already rendered (design: `GDScript`
     /// only displays text Rust hands it).
     pub fn scripture_text(&self, culture_id: u16, from: usize, count: usize) -> Vec<String> {
         let Some(culture) = self.cultures.get(culture_id as usize) else {
@@ -579,8 +583,7 @@ impl World {
             .enumerate()
             .filter(|(_, notable)| match budget {
                 Budget::Witness => true,
-                Budget::Chosen => notable.culture_id == culture_id,
-                Budget::Other => notable.culture_id == culture_id,
+                Budget::Chosen | Budget::Other => notable.culture_id == culture_id,
             })
             .map(|(index, _)| index)
             .collect();

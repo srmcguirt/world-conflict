@@ -161,23 +161,20 @@ fn elevate_prophet(world: &mut World, culture_id: u16, doctrine: Doctrine) {
         .max_by(|(_, a), (_, b)| a.salience.total_cmp(&b.salience))
         .map(|(index, _)| index);
 
-    let witness_id = match existing {
-        Some(index) => {
+    let witness_id = if let Some(index) = existing {
+        world.notables[index].role = Role::Prophet;
+        world.notables[index].id
+    } else {
+        let Some(tile) = most_populous_tile(world, culture_id) else {
+            return;
+        };
+        let Some(id) = world.promote_witness(tile) else {
+            return;
+        };
+        if let Some(index) = world.notables.iter().position(|n| n.id == id) {
             world.notables[index].role = Role::Prophet;
-            world.notables[index].id
         }
-        None => {
-            let Some(tile) = most_populous_tile(world, culture_id) else {
-                return;
-            };
-            let Some(id) = world.promote_witness(tile) else {
-                return;
-            };
-            if let Some(index) = world.notables.iter().position(|n| n.id == id) {
-                world.notables[index].role = Role::Prophet;
-            }
-            id
-        }
+        id
     };
 
     world.write_verse_kind(VerseKind::Doctrine(doctrine), witness_id);
@@ -254,8 +251,7 @@ pub fn tick_schisms(world: &mut World) {
                 polarity: Polarity::Silence,
                 witness: witness
                     .as_ref()
-                    .map(|(_, name, _)| name.clone())
-                    .unwrap_or_else(|| "the elders".to_string()),
+                    .map_or_else(|| "the elders".to_string(), |(_, name, _)| name.clone()),
                 place: witness
                     .as_ref()
                     .map(|(_, _, tile)| {
@@ -382,8 +378,7 @@ pub fn anoint(world: &mut World, culture_id: u16) {
             polarity: Polarity::Silence,
             witness: witness
                 .as_ref()
-                .map(|(_, name, _)| name.clone())
-                .unwrap_or_else(|| "the elders".to_string()),
+                .map_or_else(|| "the elders".to_string(), |(_, name, _)| name.clone()),
             place: witness
                 .as_ref()
                 .map(|(_, _, tile)| crate::names::place_name(&world.cultures[id as usize], *tile))
@@ -427,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(clippy::float_cmp, reason = "distance to itself is exactly zero")]
     fn distance_is_zero_only_for_the_same_belief() {
         assert_eq!(distance(&Belief::START, &Belief::START), 0.0);
         assert!(distance(&Belief::START, &Belief::START.witness(-1.0)) > 0.0);

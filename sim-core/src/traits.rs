@@ -97,9 +97,9 @@ pub fn skin_color(skin: f32) -> [u8; 3] {
     let pale = [226_u8, 203, 180];
     let deep = [92_u8, 61, 43];
     [
-        (pale[0] as f32 + (deep[0] as f32 - pale[0] as f32) * skin) as u8,
-        (pale[1] as f32 + (deep[1] as f32 - pale[1] as f32) * skin) as u8,
-        (pale[2] as f32 + (deep[2] as f32 - pale[2] as f32) * skin) as u8,
+        (f32::from(pale[0]) + (f32::from(deep[0]) - f32::from(pale[0])) * skin) as u8,
+        (f32::from(pale[1]) + (f32::from(deep[1]) - f32::from(pale[1])) * skin) as u8,
+        (f32::from(pale[2]) + (f32::from(deep[2]) - f32::from(pale[2])) * skin) as u8,
     ]
 }
 
@@ -111,7 +111,7 @@ pub fn dress_of(world: &World, culture_id: u16) -> [u8; 3] {
     let mut banner = crate::culture::color(culture.id);
     let skin = skin_color(culture.mean_skin);
     for (mix, tint) in banner.iter_mut().zip(skin) {
-        *mix = ((*mix as f32) * 0.65 + (tint as f32) * 0.35) as u8;
+        *mix = (f32::from(*mix) * 0.65 + f32::from(tint) * 0.35) as u8;
     }
     banner
 }
@@ -125,9 +125,9 @@ pub fn portrait(notable: &crate::notables::Notable, dress: [u8; 3]) -> Vec<u8> {
     let skin = skin_color(notable.skin);
     let hair_roll = (notable.id as usize * 31 + 7) % 3;
     let hair = [
-        (dress[0] as u32 * 7 / 10) as u8,
-        (dress[1] as u32 * 7 / 10) as u8,
-        (dress[2] as u32 * 7 / 10) as u8,
+        (u32::from(dress[0]) * 7 / 10) as u8,
+        (u32::from(dress[1]) * 7 / 10) as u8,
+        (u32::from(dress[2]) * 7 / 10) as u8,
     ];
     // Build widens the shoulders: broad or narrow, never better.
     let shoulder = 6 + (notable.stature * 3.0).round() as usize;
@@ -173,9 +173,9 @@ pub fn portrait(notable: &crate::notables::Notable, dress: [u8; 3]) -> Vec<u8> {
             let hem = y >= PORTRAIT_H - 2;
             if hem {
                 let darker = [
-                    (dress[0] as u32 * 3 / 4) as u8,
-                    (dress[1] as u32 * 3 / 4) as u8,
-                    (dress[2] as u32 * 3 / 4) as u8,
+                    (u32::from(dress[0]) * 3 / 4) as u8,
+                    (u32::from(dress[1]) * 3 / 4) as u8,
+                    (u32::from(dress[2]) * 3 / 4) as u8,
                 ];
                 fill(x, y, darker);
             } else {
@@ -212,6 +212,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "no perk returns the base unchanged, bit for bit"
+    )]
     fn perks_apply_only_where_the_country_is_hard() {
         let mut world = World::new(1);
         let (cold_tile, warm_tile) = {
@@ -228,7 +232,6 @@ mod tests {
             (cold.unwrap(), warm.unwrap())
         };
 
-        let base = perk(&world, cold_tile, 1.0);
         // Bare any adaptation first, so the tile's elevation can't sneak in.
         world.traits[cold_tile * TRAITS + COLD] = 0.0;
         world.traits[cold_tile * TRAITS + ALTITUDE] = 0.0;

@@ -4,3 +4,33 @@ disallowed-types = [
     { path = "std::collections::HashMap", reason = "determinism: unordered iteration (R9). Use BTreeMap, Vec, or a fixed-hasher IndexMap." },
     { path = "std::collections::HashSet", reason = "determinism: unordered iteration (R9). Use BTreeSet, Vec, or a fixed-hasher IndexSet." },
 ]
+
+# Determinism (design, Determinism scope): platform float intrinsics differ
+# across CPUs and libm versions; route transcendental math through `libm`.
+disallowed-methods = [
+    { path = "f32::sin", reason = "determinism: use libm::sinf" },
+    { path = "f32::cos", reason = "determinism: use libm::cosf" },
+    { path = "f32::tan", reason = "determinism: use libm::tanf" },
+    { path = "f32::atan2", reason = "determinism: use libm::atan2f" },
+    { path = "f32::exp", reason = "determinism: use libm::expf" },
+    { path = "f32::ln", reason = "determinism: use libm::logf" },
+    { path = "f32::log10", reason = "determinism: use libm::log10f" },
+    { path = "f32::powf", reason = "determinism: use libm::powf" },
+    { path = "f32::sqrt", reason = "determinism: use libm::sqrtf" },
+    { path = "f32::tanh", reason = "determinism: use libm::tanhf" },
+    { path = "f32::hypot", reason = "determinism: use libm::hypotf" },
+    { path = "f64::sin", reason = "determinism: use libm::sin" },
+    { path = "f64::cos", reason = "determinism: use libm::cos" },
+    { path = "f64::exp", reason = "determinism: use libm::exp" },
+    { path = "f64::ln", reason = "determinism: use libm::log" },
+    { path = "f64::powf", reason = "determinism: use libm::pow" },
+    { path = "f64::sqrt", reason = "determinism: use libm::sqrt" },
+    { path = "std::time::Instant::now", reason = "determinism: the sim never reads the wall clock" },
+    { path = "std::time::SystemTime::now", reason = "determinism: the sim never reads the wall clock" },
+]
+# Tests may unwrap; library code may not.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+too-many-lines-threshold = 80

@@ -5,6 +5,10 @@
 //! - player actions apply at tick boundaries only, never mid-tick (D9);
 //! - every entry point runs inside `catch_unwind`; a caught panic poisons the
 //!   Sim so a half-updated world can never be replayed silently (R5/R12).
+#![expect(
+    clippy::unused_self,
+    reason = "GDScript calls every #[func] as a method on the Sim node"
+)]
 
 use std::panic::{self, AssertUnwindSafe};
 
@@ -16,7 +20,7 @@ use sim_core::world::{GRID_HEIGHT, GRID_WIDTH, Overlay};
 /// Root simulation node. One per game session, added to the scene tree.
 #[derive(GodotClass)]
 #[class(no_init, base = Node)]
-pub struct Sim {
+pub(crate) struct Sim {
     world: World,
     /// Set when a panic is caught; blocks further stepping (R5).
     poisoned: bool,
@@ -25,7 +29,7 @@ pub struct Sim {
 
 #[godot_api]
 impl Sim {
-    /// GDScript constructor: `Sim.create(seed)`.
+    /// `GDScript` constructor: `Sim.create(seed)`.
     #[func]
     fn create(seed: i64) -> Gd<Self> {
         Gd::from_init_fn(|base| Self {
@@ -117,8 +121,7 @@ impl Sim {
             .cultures()
             .iter()
             .find(|culture| culture.favor == sim_core::culture::Favor::Chosen)
-            .map(|culture| culture.id as i64)
-            .unwrap_or(-1)
+            .map_or(-1, |culture| i64::from(culture.id))
     }
 
     /// A people's name, e.g. "the Karethi".
@@ -175,8 +178,7 @@ impl Sim {
         self.world
             .cultures()
             .get(id as usize)
-            .map(|culture| culture.piety as f64)
-            .unwrap_or(0.0)
+            .map_or(0.0, |culture| f64::from(culture.piety))
     }
 
     /// How many religions exist.
@@ -203,8 +205,7 @@ impl Sim {
         self.world
             .witnesses()
             .last()
-            .map(|witness| witness.id as i64)
-            .unwrap_or(-1)
+            .map_or(-1, |witness| i64::from(witness.id))
     }
 
     /// A witness's generated pixel portrait: RGBA bytes, see
@@ -243,9 +244,9 @@ impl Sim {
     fn culture_dress(&self, id: i64) -> Color {
         let dress = sim_core::traits::dress_of(&self.world, id.max(0) as u16);
         Color::from_rgba(
-            dress[0] as f32 / 255.0,
-            dress[1] as f32 / 255.0,
-            dress[2] as f32 / 255.0,
+            f32::from(dress[0]) / 255.0,
+            f32::from(dress[1]) / 255.0,
+            f32::from(dress[2]) / 255.0,
             1.0,
         )
     }
@@ -276,15 +277,14 @@ impl Sim {
             return None;
         }
 
-        match panic::catch_unwind(AssertUnwindSafe(|| f(&mut self.world))) {
-            Ok(value) => Some(value),
-            Err(_) => {
-                self.poisoned = true;
-                godot_error!(
-                    "[sim] panic caught; the world is poisoned. Load the last autosave or quit."
-                );
-                None
-            }
+        if let Ok(value) = panic::catch_unwind(AssertUnwindSafe(|| f(&mut self.world))) {
+            Some(value)
+        } else {
+            self.poisoned = true;
+            godot_error!(
+                "[sim] panic caught; the world is poisoned. Load the last autosave or quit."
+            );
+            None
         }
     }
 }

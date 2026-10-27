@@ -22,3 +22,48 @@ debug = "line-tables-only"
 [profile.release]
 # R12: sim-gd wraps every entry point in catch_unwind, so panics must unwind.
 panic = "unwind"
+
+# Quality gate (see AGENTS.md). Every crate opts in with `[lints] workspace = true`.
+# A lint is silenced only with `#[expect(..., reason = "...")]` at the narrowest
+# scope; `#[allow]` is denied outright so suppressions can't go stale.
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints that fight a tile-grid simulation: indices and float math
+# cross between usize, i32 and f32 on every line.
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+module_name_repetitions = "allow"
+similar_names = "allow"
+# Every pure function would need it; the noise would teach agents to ignore lints.
+must_use_candidate = "allow"
+# Restriction lints: the usual shapes of agent slop.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+unwrap_used = "deny"
+panic = "warn"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+float_cmp = "deny"
+lossy_float_literal = "deny"
+redundant_clone = "warn"
+needless_pass_by_value = "warn"
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+large_types_passed_by_value = "warn"
+undocumented_unsafe_blocks = "deny"
+
+# Used by cargo-mutants (.cargo/mutants.toml): release speed, quicker to build.
+[profile.mutants]
+inherits = "release"
+debug = "none"
+incremental = true

@@ -2,7 +2,7 @@
 //!
 //! A verse stores the facts and the slots, never the rendered sentence, so
 //! language drift (Milestone 5) can re-render the same verse in a descendant's
-//! words. GDScript only displays what `scripture_text` returns.
+//! words. `GDScript` only displays what `scripture_text` returns.
 
 use crate::faith::Doctrine;
 use crate::powers::Power;
