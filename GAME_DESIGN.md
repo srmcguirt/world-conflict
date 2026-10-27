@@ -87,9 +87,12 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - they tick yearly;
   - when one dies, it is demoted to a legend record (text only).
 - **Rendering:**
-  - The map is one `Image`. Each frame it is updated from `Sim.paint_overlay()` bytes and pushed to an `ImageTexture`. No TileMapLayer.
+  - The map is one isometric mesh, not an `Image`. Rust keeps returning one RGBA pixel per tile from `Sim.paint_overlay()`; Godot lays those colors onto a single `ArrayMesh` in iso space — a top diamond per tile at `elevation × HEIGHT_SCALE`, plus wall quads where the ground falls away to a higher neighbor (cliff faces). One `ShaderMaterial` does the beauty pass from per-vertex attributes alone: fixed-direction light on top faces, height AO, a slow ripple on water tiles, a wet rim at coastlines, and an antique-gold edge on the Chosen's tiles. No TileMapLayer. *(Revised 2026-10-27: user directed isometric; the old one-`Image` rasterization moved the projection into Rust and would re-rasterize the world on every camera move.)*
+  - Repaint is gated on `Sim.revision()` (R6): the color attribute updates only when a tick ran or an action applied; geometry rebuilds on the same flag, valid because powers apply only at tick boundaries (D9).
+  - Settlements, notables, the beacon and wonders are procedural iso objects in a `YSort` node — a settlement is a cached glyph texture keyed by `(culture style seed, material biome, tier, doctrine)`, anchored to its tile at elevation height, towers by tier, faith mark above the roof. The terrain mesh stays one draw call.
+  - Camera: fixed 2:1 isometric angle. Drag to pan, wheel to zoom, WASD/arrows. Screen→tile is a plain inverse 2:1 projection.
   - Overlay modes: biome, culture, traits, belief, polity, language.
-  - Camera pan and zoom. Scripture panel, tile and notable inspector, and power toolbar.
+  - Scripture is an event log (verses plus kingdom events for the Chosen) in a collapsible bottom strip; one selection-driven panel floats on the map (settlement card or polity panel). *(Revised 2026-10-27: map-first UI, no permanent rail.)*
 
 ### Simulation contracts (added after spec review)
 - **Cultures are discrete entities.**
