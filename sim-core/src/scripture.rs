@@ -29,6 +29,10 @@ pub enum VerseKind {
     Doctrine(Doctrine),
     /// The god turned to one people and away from another.
     Anoint { chosen: bool },
+    /// A protest against the ruler.
+    Protest,
+    /// A riot in the largest settlement.
+    Riot,
 }
 
 /// One line of holy text.
@@ -74,6 +78,12 @@ impl Verse {
             }
             VerseKind::Anoint { chosen: false } => {
                 "In year {year}, {god} turned away from {people} and toward {other}. {witness} said: we were not loved enough, and the people kept the old prayers."
+            }
+            VerseKind::Protest => {
+                "In year {year} the elders gathered at {place} and would not pay the tribute."
+            }
+            VerseKind::Riot => {
+                "In year {year} the market at {place} was burned, and two in ten of the quarter are gone."
             }
         };
         text.replace("{year}", &self.tick.to_string())

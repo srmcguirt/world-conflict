@@ -37,6 +37,25 @@ pub struct Polity {
     pub government: Government,
     /// How alike the polity's tiles are culturally and in faith, 0–1.
     pub cohesion: f32,
+    // --- meters (0–1, refreshed each 25-tick check) ---
+    pub prosperity: f32,
+    pub inequality: f32,
+    pub legitimacy: f32,
+    pub piety: f32,
+    pub liberty: f32,
+    pub unrest: f32,
+    // --- strata shares (of population) ---
+    pub commoner_share: f32,
+    pub artisan_share: f32,
+    pub priest_share: f32,
+    pub ruler_share: f32,
+    // --- strata wealth shares ---
+    pub commoner_wealth: f32,
+    pub artisan_wealth: f32,
+    pub priest_wealth: f32,
+    pub ruler_wealth: f32,
+    // --- government evolution ---
+    pub government_checks: u8,
 }
 
 /// How far a settlement can be from a polity's capital and still join it.
@@ -48,6 +67,9 @@ pub fn tick_polities(world: &mut World) {
     join_polities(world);
     assign_territory(world);
     compute_cohesion(world);
+    tick_meters(world);
+    tick_governments(world);
+    tick_unrest(world);
 }
 
 /// Found new polities from tier-1+ settlements with no polity within reach.
@@ -99,6 +121,21 @@ fn found_polities(world: &mut World) {
             settlements: vec![settlement.id],
             government: Government::Band,
             cohesion: 1.0,
+            prosperity: 0.5,
+            inequality: 0.3,
+            legitimacy: 0.5,
+            piety: 0.5,
+            liberty: 0.3,
+            unrest: 0.0,
+            commoner_share: 0.7,
+            artisan_share: 0.15,
+            priest_share: 0.10,
+            ruler_share: 0.05,
+            commoner_wealth: 0.4,
+            artisan_wealth: 0.2,
+            priest_wealth: 0.2,
+            ruler_wealth: 0.2,
+            government_checks: 0,
         });
     }
     world.polities.extend(new_polities);
@@ -212,6 +249,174 @@ fn compute_cohesion(world: &mut World) {
         let cohesion = (1.0 - libm::sqrtf(var)).clamp(0.0, 1.0);
         if let Some(polity) = world.polities.iter_mut().find(|p| p.id == pid) {
             polity.cohesion = cohesion;
+        }
+    }
+}
+
+/// Meters: refreshed each 25-tick check with hysteresis.
+pub fn tick_meters(world: &mut World) {
+    for polity in &mut world.polities {
+        let tiles: Vec<usize> = world
+            .tile_polity
+            .iter()
+            .enumerate()
+            .filter(|&(_, &p)| p == polity.id as u16)
+            .map(|(i, _)| i)
+            .collect();
+        if tiles.is_empty() {
+            continue;
+        }
+        // Prosperity: food + goods per person, simplified to population density.
+        let pop: f32 = tiles.iter().map(|&t| world.population[t]).sum();
+        polity.prosperity = (pop / (tiles.len() as f32 * 12.0)).clamp(0.0, 1.0);
+
+        // Piety: culture-level belief magnitude.
+        let culture = world.cultures.get(polity.culture_id as usize);
+        polity.piety = culture.map_or(0.5, |c| {
+            let axes = c.belief.to_axes();
+            let sum: f32 = axes.iter().map(|x| x.abs()).sum();
+            (sum / crate::belief::AXES as f32).clamp(0.0, 1.0)
+        });
+
+        // Legitimacy: source depends on government.
+        polity.legitimacy = match polity.government {
+            Government::Theocracy => polity.piety,
+            Government::Monarchy | Government::Band => 0.5,
+            Government::Chiefdom => polity.prosperity,
+        };
+
+        // Unrest: rises with inequality, low prosperity, low legitimacy, low cohesion.
+        polity.unrest = (polity.inequality * 0.3
+            + (1.0 - polity.prosperity) * 0.3
+            + (1.0 - polity.legitimacy) * 0.2
+            + (1.0 - polity.cohesion) * 0.2)
+            .clamp(0.0, 1.0);
+    }
+}
+
+/// Government evolution: threshold rules, 2 checks.
+pub fn tick_governments(world: &mut World) {
+    for polity in &mut world.polities {
+        let target = match polity.government {
+            Government::Band => {
+                // Band -> Chiefdom when a tier-1+ settlement exists.
+                let has_village = polity
+                    .settlements
+                    .iter()
+                    .any(|&sid| world.settlements.iter().any(|s| s.id == sid && s.tier >= 1));
+                if has_village {
+                    Some(Government::Chiefdom)
+                } else {
+                    None
+                }
+            }
+            Government::Chiefdom => {
+                // Chiefdom -> Theocracy: piety > 0.7 and priest wealth >= 30%.
+                if polity.piety > 0.7 && polity.priest_wealth >= 0.3 {
+                    Some(Government::Theocracy)
+                } else if polity.legitimacy > 0.5 {
+                    Some(Government::Monarchy)
+                } else {
+                    None
+                }
+            }
+            _ => None, // Monarchy and Theocracy are terminal in M6a.
+        };
+
+        if let Some(new_gov) = target {
+            polity.government_checks = polity.government_checks.saturating_add(1);
+            if polity.government_checks >= 2 {
+                polity.government = new_gov;
+                polity.government_checks = 0;
+            }
+        } else {
+            polity.government_checks = 0;
+        }
+    }
+}
+
+/// Unrest outcomes: protest and riot (M6a). Rebellion/revolution/exodus
+/// wait for M8.
+pub fn tick_unrest(world: &mut World) {
+    // Collect polity ids and their unrest levels.
+    let unrest_levels: Vec<(u32, f32, u16)> = world
+        .polities
+        .iter()
+        .map(|p| (p.id, p.unrest, p.culture_id))
+        .collect();
+
+    for (polity_id, unrest, culture_id) in unrest_levels {
+        if unrest < 0.5 {
+            continue;
+        }
+        // Protest: write a verse for the culture's scripture.
+        let ci = culture_id as usize;
+        if ci < world.cultures.len() {
+            let place = if let Some(settlement) = world.settlements.iter().find(|s| {
+                world
+                    .polities
+                    .iter()
+                    .any(|p| p.id == polity_id && p.capital == s.id)
+            }) {
+                crate::names::place_name(&world.cultures[ci], settlement.tile)
+            } else {
+                String::new()
+            };
+            let verse = crate::scripture::Verse {
+                tick: world.tick(),
+                kind: crate::scripture::VerseKind::Protest,
+                polarity: crate::scripture::Polarity::Silence,
+                witness: "the elders".to_string(),
+                place,
+                place_tile: 0,
+                people: world.cultures[ci].name.clone(),
+                other: String::new(),
+                witness_id: None,
+                mutation: 0,
+            };
+            world.cultures[ci].scripture.push(verse);
+        }
+
+        if unrest >= 0.65 {
+            // Riot: -2% population in the largest settlement, one building damaged.
+            let largest_settlement =
+                world
+                    .polities
+                    .iter()
+                    .find(|p| p.id == polity_id)
+                    .and_then(|p| {
+                        p.settlements
+                            .iter()
+                            .filter_map(|&sid| world.settlements.iter().find(|s| s.id == sid))
+                            .max_by(|a, b| a.population.total_cmp(&b.population))
+                            .map(|s| s.id)
+                    });
+            if let Some(sid) = largest_settlement
+                && let Some(settlement) = world.settlements.iter_mut().find(|s| s.id == sid)
+            {
+                // Remove 2% of the settlement's population from its catchment.
+                let loss = settlement.population * 0.02;
+                // Distribute the loss across catchment tiles.
+                let tiles = settlement.catchment.clone();
+                let per_tile = loss / tiles.len().max(1) as f32;
+                for t in &tiles {
+                    world.population[*t] = (world.population[*t] - per_tile).max(0.0);
+                }
+                settlement.population = settlement
+                    .catchment
+                    .iter()
+                    .map(|&t| world.population[t])
+                    .sum();
+                // Damage one building.
+                for slot in &mut settlement.slots {
+                    if let Some(b) = slot
+                        && b.level > 0
+                    {
+                        b.level = b.level.saturating_sub(1);
+                        break;
+                    }
+                }
+            }
         }
     }
 }
