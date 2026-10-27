@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! cargo run -p sim-core --bin worldsim -- --seed 1 --years 2000 --out run.png
-//! cargo run -p sim-core --bin worldsim -- --overlay culture --trace 250
+//! cargo run -p sim-core --bin worldsim -- --years 2000 --overlay biome --out map.png
 //! ```
 //!
 //! Tuning metrics: settled tiles and population over time, culture count,
@@ -30,6 +30,7 @@ fn main() -> ExitCode {
     let mut years = 0_u32;
     let mut trace = 0_u32;
     let mut out = None::<String>;
+    let mut overlay = Overlay::Culture;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -39,6 +40,16 @@ fn main() -> ExitCode {
             "--years" => years = value().and_then(|v| v.parse().ok()).unwrap_or(years),
             "--trace" => trace = value().and_then(|v| v.parse().ok()).unwrap_or(trace),
             "--out" => out = value(),
+            "--overlay" => {
+                overlay = match value().as_deref() {
+                    Some("biome") => Overlay::Biome,
+                    Some("culture") | None => Overlay::Culture,
+                    Some(other) => {
+                        eprintln!("unknown overlay: {other} (biome|culture)");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 return ExitCode::FAILURE;
@@ -65,8 +76,7 @@ fn main() -> ExitCode {
     print_cultures(&world);
 
     if let Some(out) = out {
-        let mode = Overlay::Culture;
-        let rgba = world.paint_overlay(mode);
+        let rgba = world.paint_overlay(overlay);
         if let Err(err) = write_png(
             Path::new(&out),
             GRID_WIDTH as u32,
