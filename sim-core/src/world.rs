@@ -16,6 +16,7 @@ use crate::names;
 use crate::notables::{self, Budget, Legend, Notable, Role};
 use crate::powers::{self, Action, ActionKind, PendingOutcome, Power};
 use crate::scripture::Verse;
+use crate::traits;
 use crate::worldgen::{self, Biome, GeneratedWorld};
 
 /// Milestone 1 grid: an equirectangular tile map that wraps east to west.
@@ -103,6 +104,9 @@ pub struct World {
     pub(crate) population_10_ago: Vec<f32>,
     /// Belief per tile, six axes each (design, Belief model).
     pub belief: Vec<f32>,
+    /// People traits per tile: skin, stature, cold, altitude
+    /// (design, Physical adaptation).
+    pub traits: Vec<f32>,
     /// Witness windows still open.
     pub(crate) pending: Vec<PendingOutcome>,
     /// Queued player actions, in arrival order (design, Player actions).
@@ -154,6 +158,7 @@ impl World {
             blessed_until: vec![0; tiles],
             population_10_ago: vec![0.0; tiles],
             belief: tiles_flat_belief(tiles),
+            traits: vec![traits::START; tiles * traits::TRAITS],
             pending: Vec::new(),
             queue: Vec::new(),
             actions: Vec::new(),
@@ -240,11 +245,30 @@ impl World {
                 }
                 bytes
             }
-            // Traits, polities and languages arrive in Milestones 4-5; until
-            // then those modes paint the biome overlay.
-            Overlay::Traits | Overlay::Polity | Overlay::Language => {
-                worldgen::overlay_biome(&self.biome)
+            // What each tile's people look like: skin tone, cooled toward
+            // slate with altitude (thin air, hard country).
+            Overlay::Traits => {
+                let mut bytes = Vec::with_capacity(self.biome.len() * 4);
+                for tile in 0..self.biome.len() {
+                    let start = tile * traits::TRAITS;
+                    let mut rgb = traits::skin_color(self.traits[start + traits::SKIN]);
+                    if self.population[tile] < 1.0 {
+                        rgb = culture::unsettled_color(self.biome[tile]);
+                    } else {
+                        let altitude = self.traits[start + traits::ALTITUDE];
+                        for (mix, slate) in rgb.iter_mut().zip([104_u8, 116, 128]) {
+                            *mix = (*mix as f32 * (1.0 - altitude * 0.35)
+                                + slate as f32 * altitude * 0.35)
+                                as u8;
+                        }
+                    }
+                    bytes.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+                }
+                bytes
             }
+            // Polities and languages arrive in later milestones; until then
+            // those modes paint the biome overlay.
+            Overlay::Polity | Overlay::Language => worldgen::overlay_biome(&self.biome),
         }
     }
 
@@ -317,6 +341,11 @@ impl World {
         self.belief[start..start + belief::AXES].copy_from_slice(&value.to_axes());
     }
 
+    /// Writes one trait axis on a tile.
+    pub fn set_trait(&mut self, tile: usize, axis: usize, value: f32) {
+        self.traits[tile * traits::TRAITS + axis] = value.clamp(0.0, 1.0);
+    }
+
     /// The Δpopulation% this tile's own 10-tick trend predicts for a 5-tick
     /// window (design, Witness rule).
     pub fn expected_growth(&self, tile: usize) -> f32 {
@@ -346,6 +375,11 @@ impl World {
 
         let id = self.next_notable_id;
         self.next_notable_id += 1;
+        let start = tile * traits::TRAITS;
+        let (skin, stature) = (
+            self.traits[start + traits::SKIN],
+            self.traits[start + traits::STATURE],
+        );
         self.notables.push(Notable {
             id,
             culture_id,
@@ -354,6 +388,8 @@ impl World {
             born_tick: self.tick,
             role,
             salience: 1.0,
+            skin,
+            stature,
         });
         Some(id)
     }
@@ -611,6 +647,7 @@ impl World {
         // (design, Simulation contracts).
         if self.tick.is_multiple_of(10) {
             self.population_10_ago.copy_from_slice(&self.population);
+            traits::tick_adaptation(self);
             faith::tick_testimony(self);
             culture::refresh_aggregates(self);
             faith::tick_doctrine_effects(self);

@@ -79,6 +79,12 @@ pub struct Culture {
     pub(crate) schism_passes: u8,
     /// Strength of belief minus absence (design, Piety).
     pub piety: f32,
+    /// Mean traits of the people, refreshed every 10 ticks
+    /// (design, Physical adaptation). Dress and portraits read these.
+    pub mean_skin: f32,
+    pub mean_stature: f32,
+    pub mean_cold: f32,
+    pub mean_altitude: f32,
     /// The tile the god last blessed for them (design, Protective).
     pub sacred_tile: Option<usize>,
 }
@@ -113,6 +119,10 @@ impl Culture {
             schism_passes: 0,
             piety: 0.0,
             sacred_tile: None,
+            mean_skin: crate::traits::START,
+            mean_stature: crate::traits::START,
+            mean_cold: crate::traits::START,
+            mean_altitude: crate::traits::START,
         };
         culture.name = names::people_name(&culture);
         culture
@@ -150,6 +160,10 @@ impl Culture {
             schism_passes: 0,
             piety: parent.piety,
             sacred_tile: parent.sacred_tile,
+            mean_skin: parent.mean_skin,
+            mean_stature: parent.mean_stature,
+            mean_cold: parent.mean_cold,
+            mean_altitude: parent.mean_altitude,
         };
         culture.name = names::people_name(&culture);
         culture
@@ -328,6 +342,28 @@ pub fn refresh_aggregates(world: &mut World) {
             culture.belief = Belief::from_axes(&axes);
         }
         culture.piety = crate::faith::piety(&culture.belief);
+    }
+    // Trait means: what the people look like on average, for dress tints and
+    // the traits overlay legend.
+    let mut trait_sums = vec![[0.0_f32; crate::traits::TRAITS]; world.cultures.len()];
+    for tile in 0..world.population.len() {
+        let id = world.culture_id[tile];
+        if id == NO_CULTURE || world.population[tile] < 1.0 {
+            continue;
+        }
+        let start = tile * crate::traits::TRAITS;
+        for (axis, sum) in trait_sums[id as usize].iter_mut().enumerate() {
+            *sum += world.traits[start + axis];
+        }
+    }
+    for (index, culture) in world.cultures.iter_mut().enumerate() {
+        let tiles = members[index].len() as f32;
+        if tiles > 0.0 {
+            culture.mean_skin = trait_sums[index][crate::traits::SKIN] / tiles;
+            culture.mean_stature = trait_sums[index][crate::traits::STATURE] / tiles;
+            culture.mean_cold = trait_sums[index][crate::traits::COLD] / tiles;
+            culture.mean_altitude = trait_sums[index][crate::traits::ALTITUDE] / tiles;
+        }
     }
 }
 

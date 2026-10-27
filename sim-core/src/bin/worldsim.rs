@@ -52,9 +52,10 @@ fn main() -> ExitCode {
                 overlay = match value().as_deref() {
                     Some("biome") => Overlay::Biome,
                     Some("culture") | None => Overlay::Culture,
+                    Some("traits") => Overlay::Traits,
                     Some("belief") => Overlay::Belief,
                     Some(other) => {
-                        eprintln!("unknown overlay: {other} (biome|culture|belief)");
+                        eprintln!("unknown overlay: {other} (biome|culture|traits|belief)");
                         return ExitCode::FAILURE;
                     }
                 }
@@ -182,7 +183,7 @@ fn print_cultures(world: &World) {
     println!("cultures: {}", cultures.len());
     for culture in cultures {
         println!(
-            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0} faith {} {:?} piety {:.2} belief {:?}",
+            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0} faith {} {:?} piety {:.2} skin {:.2}",
             culture.id,
             culture.parent_id,
             culture.favor,
@@ -191,10 +192,7 @@ fn print_cultures(world: &World) {
             culture.faith_id,
             culture.doctrine,
             culture.piety,
-            culture
-                .belief
-                .to_axes()
-                .map(|axis| (axis * 100.0).round() / 100.0)
+            culture.mean_skin,
         );
         let parts = culture::components(world, culture.id);
         let sizes: Vec<usize> = parts.iter().map(|part| part.len()).collect();

@@ -270,6 +270,8 @@ These replace the one-line "Settlements and kingdoms" and "Tech" bullets above. 
 
 The player never builds, legislates or researches directly. This stays a god game: you shape these systems through powers, covenants and prophets, and your people do the rest.
 
+- **Doctrine proposes, covenants bind** (user decision 2026-10-27). A doctrine practice — a wrathful people's sacrifice, for example — is the people's own reading of the god's conduct, never a thing they do *for being Chosen*, and it exists with or without the player's approval. From Milestone 8 the player sets covenants (laws, ethics, lifestyle and dietary restrictions among them) that bound what a people may enact: a practice the covenant forbids does not fire — instead it shows up as tension, transgression when they do it anyway, and a Reformations seed. Your conduct writes their doctrine; your covenant bounds their law.
+
 ### Shared design rules
 - **People decide, the god nudges.** Each system has a "need" driver that the sim computes and a "values" driver that comes from culture and doctrine. The player's levers act on those drivers, never on a build menu.
 - **Faith is visible.** Each system has at least one place where doctrine changes what you see on the map or read in scripture.

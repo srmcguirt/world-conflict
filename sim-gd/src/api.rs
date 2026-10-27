@@ -197,7 +197,59 @@ impl Sim {
         self.world.witnesses().len() as i64
     }
 
-    /// The newest witness as "name, of the people" — who saw what you did.
+    /// The id of the newest living witness, or -1 when there is none.
+    #[func]
+    fn newest_witness_id(&self) -> i64 {
+        self.world
+            .witnesses()
+            .last()
+            .map(|witness| witness.id as i64)
+            .unwrap_or(-1)
+    }
+
+    /// A witness's generated pixel portrait: RGBA bytes, see
+    /// `portrait_width` and `portrait_height`.
+    #[func]
+    fn portrait(&self, witness_id: i64) -> PackedByteArray {
+        let pixels = self
+            .world
+            .notables()
+            .iter()
+            .find(|notable| notable.id == witness_id.max(0) as u32)
+            .map(|notable| {
+                sim_core::traits::portrait(
+                    notable,
+                    sim_core::traits::dress_of(&self.world, notable.culture_id),
+                )
+            })
+            .unwrap_or_default();
+        PackedByteArray::from(pixels)
+    }
+
+    /// The portrait's width, in pixels.
+    #[func]
+    fn portrait_width(&self) -> i64 {
+        sim_core::traits::PORTRAIT_W as i64
+    }
+
+    /// The portrait's height, in pixels.
+    #[func]
+    fn portrait_height(&self) -> i64 {
+        sim_core::traits::PORTRAIT_H as i64
+    }
+
+    /// A people's dress color: their banner warmed by their skin.
+    #[func]
+    fn culture_dress(&self, id: i64) -> Color {
+        let dress = sim_core::traits::dress_of(&self.world, id.max(0) as u16);
+        Color::from_rgba(
+            dress[0] as f32 / 255.0,
+            dress[1] as f32 / 255.0,
+            dress[2] as f32 / 255.0,
+            1.0,
+        )
+    }
+
     #[func]
     fn newest_witness(&self) -> GString {
         let witnesses = self.world.witnesses();

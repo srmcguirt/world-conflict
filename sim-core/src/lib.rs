@@ -19,6 +19,7 @@ pub mod names;
 pub mod notables;
 pub mod powers;
 pub mod scripture;
+pub mod traits;
 pub mod world;
 pub mod worldgen;
 

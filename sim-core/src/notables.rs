@@ -35,6 +35,10 @@ pub struct Notable {
     pub born_tick: u64,
     pub role: Role,
     pub salience: f32,
+    /// How the person looks, sampled from their tile when promoted
+    /// (design, Physical adaptation).
+    pub skin: f32,
+    pub stature: f32,
 }
 
 impl Notable {

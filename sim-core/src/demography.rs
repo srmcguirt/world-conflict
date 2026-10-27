@@ -106,7 +106,10 @@ pub fn tick_population(world: &mut World) {
         if population <= 0.0 {
             continue;
         }
-        let grown = population + GROWTH_RATE * population * (1.0 - population / capacity);
+        let growth = GROWTH_RATE * population * (1.0 - population / capacity);
+        // Adapted bodies earn a small edge in the country that shaped them
+        // (design, Physical adaptation: small regional perks, never a ranking).
+        let grown = population + crate::traits::perk(world, i, growth);
         world.population[i] = grown.clamp(0.0, capacity);
     }
 }
@@ -168,6 +171,12 @@ pub fn tick_migration(world: &mut World) {
             world
                 .belief
                 .copy_within(belief_src..belief_src + crate::belief::AXES, belief_dst);
+            // Settlers carry their bodies and their stories alike.
+            let trait_src = i * crate::traits::TRAITS;
+            let trait_dst = target * crate::traits::TRAITS;
+            world
+                .traits
+                .copy_within(trait_src..trait_src + crate::traits::TRAITS, trait_dst);
             for k in 0..culture::DIMS {
                 let shift = (world.rng.random::<f32>() - 0.5) * 2.0 * FOUNDER_MUTATION;
                 world.culture_vec[dst + k] = (world.culture_vec[dst + k] + shift).clamp(0.0, 1.0);

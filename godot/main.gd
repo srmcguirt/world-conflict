@@ -5,8 +5,9 @@ extends Node
 
 const OVERLAY_BIOME := 0
 const OVERLAY_CULTURE := 1
+const OVERLAY_TRAITS := 2
 const OVERLAY_BELIEF := 3
-const OVERLAYS := [OVERLAY_BIOME, OVERLAY_CULTURE, OVERLAY_BELIEF]
+const OVERLAYS := [OVERLAY_BIOME, OVERLAY_CULTURE, OVERLAY_TRAITS, OVERLAY_BELIEF]
 ## Years per second at each speed step (design: 1x = 1 year per second).
 const SPEEDS := [1, 5, 25, 100]
 ## Sim time budget per frame, in milliseconds (design, Frame and tick scheduling).
@@ -32,6 +33,7 @@ var map: TextureRect
 var hud: Label
 var scripture_list: VBoxContainer
 var scripture_header: Label
+var portrait_view: TextureRect
 var last_revision := -1
 var last_verse := ""
 var speed_index := 0
@@ -93,6 +95,13 @@ func _build_scripture() -> void:
 	column.offset_bottom = -12
 	column.add_theme_constant_override("separation", 12)
 	panel.add_child(column)
+
+	portrait_view = TextureRect.new()
+	portrait_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	portrait_view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait_view.custom_minimum_size = Vector2(sim.portrait_width() * 3, sim.portrait_height() * 3)
+	portrait_view.visible = false
+	column.add_child(portrait_view)
 
 	scripture_header = Label.new()
 	scripture_header.add_theme_color_override("font_color", GOLD)
@@ -166,6 +175,8 @@ func _overlay_name() -> String:
 	match OVERLAYS[overlay_index]:
 		OVERLAY_CULTURE:
 			return "culture"
+		OVERLAY_TRAITS:
+			return "traits"
 		OVERLAY_BELIEF:
 			return "belief"
 		_:
@@ -239,11 +250,30 @@ func repaint() -> void:
 	last_revision = sim.revision()
 
 
+## Shows the newest witness's portrait beside their verse.
+func _show_newest_portrait() -> void:
+	var witness: int = sim.newest_witness_id()
+	if witness < 0:
+		portrait_view.visible = false
+		return
+	var bytes: PackedByteArray = sim.portrait(witness)
+	if bytes.is_empty():
+		portrait_view.visible = false
+		return
+	var portrait := Image.create_from_data(
+		sim.portrait_width(), sim.portrait_height(), false, Image.FORMAT_RGBA8, bytes
+	)
+	var texture := ImageTexture.create_from_image(portrait)
+	portrait_view.texture = texture
+	portrait_view.visible = true
+
+
 ## The scripture column: the Chosen people's newest verses, first at the top.
 func _refresh_scripture() -> void:
 	var chosen := sim.chosen_culture()
 	if chosen < 0:
 		return
+	_show_newest_portrait()
 	var doctrine := sim.culture_doctrine(chosen)
 	scripture_header.text = (
 		"%s · %s · piety %.2f"
