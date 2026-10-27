@@ -17,11 +17,12 @@ pub const OTHER_BUDGET: usize = 15;
 /// Ticks a witness has to be elevated before it becomes an ordinary person.
 pub const WITNESS_TENURE: u64 = 20;
 
-/// What a notable is. Only witnesses exist in Milestone 2; prophets, heretics,
-/// heroes and rulers arrive with belief, war and kingdoms.
+/// What a notable is. Prophets arrive with belief (Milestone 3); heretics,
+/// heroes and rulers arrive with war and kingdoms.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Role {
     Witness,
+    Prophet,
 }
 
 /// A named individual who saw something happen.

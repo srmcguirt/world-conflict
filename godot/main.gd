@@ -244,7 +244,15 @@ func _refresh_scripture() -> void:
 	var chosen := sim.chosen_culture()
 	if chosen < 0:
 		return
-	scripture_header.text = sim.culture_name(chosen)
+	var doctrine := sim.culture_doctrine(chosen)
+	scripture_header.text = (
+		"%s · %s · piety %.2f"
+		% [
+			sim.culture_name(chosen),
+			doctrine if doctrine != "" else "no doctrine",
+			sim.culture_piety(chosen),
+		]
+	)
 
 	var verses: PackedStringArray = sim.scripture(chosen, 0, 12)
 	if verses.size() > 0 and verses[0] == last_verse:

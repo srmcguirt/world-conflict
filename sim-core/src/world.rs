@@ -11,9 +11,10 @@ use rand_pcg::Pcg64;
 use crate::belief::{self, Belief};
 use crate::culture::{self, Culture, NO_CULTURE};
 use crate::demography;
+use crate::faith::{self, Faith};
 use crate::names;
 use crate::notables::{self, Budget, Legend, Notable, Role};
-use crate::powers::{self, Action, PendingOutcome, Power};
+use crate::powers::{self, Action, ActionKind, PendingOutcome, Power};
 use crate::scripture::Verse;
 use crate::worldgen::{self, Biome, GeneratedWorld};
 
@@ -116,6 +117,8 @@ pub struct World {
     pub(crate) next_notable_id: u32,
     /// Beasts wandering the map.
     pub(crate) beasts: Vec<Beast>,
+    /// Every religion, indexed by faith id.
+    pub(crate) faiths: Vec<Faith>,
 }
 
 impl World {
@@ -158,8 +161,14 @@ impl World {
             legends: Vec::new(),
             next_notable_id: 1,
             beasts: Vec::new(),
+            faiths: Vec::new(),
         };
         demography::plant_eden(&mut world);
+        world.faiths.push(Faith {
+            id: 0,
+            founded_tick: 0,
+            founding_belief: Belief::START,
+        });
         world
     }
 
@@ -244,10 +253,25 @@ impl World {
     pub fn queue_power(&mut self, power: Power, x: usize, y: usize) {
         self.queue.push(Action {
             tick: self.tick + 1,
-            power,
-            x: x % GRID_WIDTH,
-            y: y.min(GRID_HEIGHT - 1),
+            kind: ActionKind::Power {
+                power,
+                x: x % GRID_WIDTH,
+                y: y.min(GRID_HEIGHT - 1),
+            },
         });
+    }
+
+    /// Queues an anointing of another people (design D11).
+    pub fn queue_anoint(&mut self, culture_id: u16) {
+        self.queue.push(Action {
+            tick: self.tick + 1,
+            kind: ActionKind::Anoint { culture_id },
+        });
+    }
+
+    /// Every religion that exists, indexed by faith id.
+    pub fn faiths(&self) -> &[Faith] {
+        &self.faiths
     }
 
     /// Every action that has applied, in order: the replay log.
@@ -344,6 +368,29 @@ impl World {
         }
     }
 
+    /// Writes a verse of some other kind for one witness.
+    pub fn write_verse_kind(&mut self, kind: crate::scripture::VerseKind, witness_id: u32) {
+        let Some(notable) = self.notables.iter().find(|n| n.id == witness_id) else {
+            return;
+        };
+        let culture_id = notable.culture_id;
+        let Some(culture) = self.cultures.get(culture_id as usize) else {
+            return;
+        };
+        let verse = Verse {
+            tick: self.tick(),
+            kind,
+            polarity: crate::scripture::Polarity::Silence,
+            witness: notable.name.clone(),
+            place: names::place_name(culture, notable.tile as usize),
+            people: culture.name.clone(),
+            other: String::new(),
+            witness_id: Some(witness_id),
+            mutation: 0,
+        };
+        self.cultures[culture_id as usize].scripture.push(verse);
+    }
+
     /// A people's scripture, newest first, already rendered (design: GDScript
     /// only displays text Rust hands it).
     pub fn scripture_text(&self, culture_id: u16, from: usize, count: usize) -> Vec<String> {
@@ -437,7 +484,10 @@ impl World {
             .collect();
         self.queue.retain(|action| action.tick > self.tick);
         for action in due {
-            powers::apply(self, action.power, action.x, action.y);
+            match action.kind {
+                ActionKind::Power { power, x, y } => powers::apply(self, power, x, y),
+                ActionKind::Anoint { culture_id } => faith::anoint(self, culture_id),
+            }
             self.actions.push(action);
         }
     }
@@ -561,11 +611,15 @@ impl World {
         // (design, Simulation contracts).
         if self.tick.is_multiple_of(10) {
             self.population_10_ago.copy_from_slice(&self.population);
+            faith::tick_testimony(self);
             culture::refresh_aggregates(self);
+            faith::tick_doctrine_effects(self);
         }
         if self.tick.is_multiple_of(25) {
             culture::tick_splits(self);
             culture::refresh_aggregates(self);
+            faith::tick_doctrines(self);
+            faith::tick_schisms(self);
         }
     }
 }

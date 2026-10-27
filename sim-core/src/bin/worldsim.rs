@@ -6,6 +6,7 @@
 //! cargo run -p sim-core --bin worldsim -- --seed 1 --years 2000 --out run.png
 //! cargo run -p sim-core --bin worldsim -- --years 2000 --overlay biome --out map.png
 //! cargo run -p sim-core --bin worldsim -- --years 300 --cast 4 --after 10 --overlay belief
+//! cargo run -p sim-core --bin worldsim -- --years 300 --cast 4 --casts 12 --after 5
 //! ```
 //!
 //! Tuning metrics: settled tiles and population over time, culture count,
@@ -34,6 +35,7 @@ fn main() -> ExitCode {
     let mut overlay = Overlay::Culture;
     let mut cast: Option<i64> = None;
     let mut after = 0_u32;
+    let mut casts = 0_u32;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -45,6 +47,7 @@ fn main() -> ExitCode {
             "--out" => out = value(),
             "--cast" => cast = value().and_then(|v| v.parse().ok()),
             "--after" => after = value().and_then(|v| v.parse().ok()).unwrap_or(after),
+            "--casts" => casts = value().and_then(|v| v.parse().ok()).unwrap_or(casts),
             "--overlay" => {
                 overlay = match value().as_deref() {
                     Some("biome") => Overlay::Biome,
@@ -80,12 +83,16 @@ fn main() -> ExitCode {
 
     if let Some(index) = cast {
         let eden = world.eden_tile().expect("Eden exists");
-        world.queue_power(
-            sim_core::powers::Power::from_index(index),
-            eden % GRID_WIDTH,
-            eden / GRID_WIDTH,
-        );
-        world.step(after.max(1));
+        let power = sim_core::powers::Power::from_index(index);
+        // Repeated casts aim at wherever the most people live, the way a
+        // player would: smiting a graveyard tells you nothing about belief.
+        for _ in 0..casts.max(1) {
+            let target = (0..world.population.len())
+                .max_by(|&a, &b| world.population[a].total_cmp(&world.population[b]))
+                .unwrap_or(eden);
+            world.queue_power(power, target % GRID_WIDTH, target / GRID_WIDTH);
+            world.step(after.max(1));
+        }
     }
 
     print_biomes(&world);
@@ -175,8 +182,19 @@ fn print_cultures(world: &World) {
     println!("cultures: {}", cultures.len());
     for culture in cultures {
         println!(
-            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0}",
-            culture.id, culture.parent_id, culture.favor, culture.tiles, culture.population
+            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0} faith {} {:?} piety {:.2} belief {:?}",
+            culture.id,
+            culture.parent_id,
+            culture.favor,
+            culture.tiles,
+            culture.population,
+            culture.faith_id,
+            culture.doctrine,
+            culture.piety,
+            culture
+                .belief
+                .to_axes()
+                .map(|axis| (axis * 100.0).round() / 100.0)
         );
         let parts = culture::components(world, culture.id);
         let sizes: Vec<usize> = parts.iter().map(|part| part.len()).collect();

@@ -6,6 +6,8 @@
 //! region's biome target; tiles drift and blend, and a component that drifts
 //! far enough from its parent's centroid becomes a daughter people.
 
+use crate::belief::Belief;
+use crate::faith::Doctrine;
 use crate::names::{self, Phonemes};
 use crate::scripture::Verse;
 use crate::world::{GRID_HEIGHT, GRID_WIDTH, World};
@@ -65,6 +67,20 @@ pub struct Culture {
     pub phonemes: Phonemes,
     /// Their holy text, oldest first.
     pub scripture: Vec<Verse>,
+    /// Population-weighted belief, refreshed every 10 ticks.
+    pub belief: Belief,
+    /// The doctrine they live by, once one crystallizes.
+    pub doctrine: Option<Doctrine>,
+    /// Doctrine hysteresis counter.
+    pub(crate) doctrine_passes: u8,
+    /// The faith they belong to.
+    pub faith_id: u16,
+    /// Schism hysteresis counter.
+    pub(crate) schism_passes: u8,
+    /// Strength of belief minus absence (design, Piety).
+    pub piety: f32,
+    /// The tile the god last blessed for them (design, Protective).
+    pub sacred_tile: Option<usize>,
 }
 
 impl Culture {
@@ -90,6 +106,13 @@ impl Culture {
             name: String::new(),
             phonemes: Phonemes::seeded(name_seed),
             scripture: Vec::new(),
+            belief: Belief::START,
+            doctrine: None,
+            doctrine_passes: 0,
+            faith_id: 0,
+            schism_passes: 0,
+            piety: 0.0,
+            sacred_tile: None,
         };
         culture.name = names::people_name(&culture);
         culture
@@ -120,6 +143,13 @@ impl Culture {
             name: String::new(),
             phonemes: parent.phonemes.clone(),
             scripture: parent.scripture.clone(),
+            belief: parent.belief,
+            doctrine: parent.doctrine,
+            doctrine_passes: 0,
+            faith_id: parent.faith_id,
+            schism_passes: 0,
+            piety: parent.piety,
+            sacred_tile: parent.sacred_tile,
         };
         culture.name = names::people_name(&culture);
         culture
@@ -274,6 +304,30 @@ pub fn refresh_aggregates(world: &mut World) {
         if culture.tiles > 0 {
             culture.centroid = centroid;
         }
+    }
+    // Belief reads per culture, population-weighted over its tiles (design:
+    // belief lives per tile; doctrine reads per culture).
+    let mut belief_sums = vec![[0.0_f32; crate::belief::AXES]; world.cultures.len()];
+    let mut belief_weights = vec![0.0_f32; world.cultures.len()];
+    for tile in 0..world.population.len() {
+        let id = world.culture_id[tile];
+        if id == NO_CULTURE || world.population[tile] < 1.0 {
+            continue;
+        }
+        let weight = world.population[tile];
+        belief_weights[id as usize] += weight;
+        let start = tile * crate::belief::AXES;
+        for (axis, slot) in belief_sums[id as usize].iter_mut().enumerate() {
+            *slot += world.belief[start + axis] * weight;
+        }
+    }
+    for (index, culture) in world.cultures.iter_mut().enumerate() {
+        let weight = belief_weights[index];
+        if weight > 0.0 {
+            let axes: Vec<f32> = belief_sums[index].iter().map(|sum| sum / weight).collect();
+            culture.belief = Belief::from_axes(&axes);
+        }
+        culture.piety = crate::faith::piety(&culture.belief);
     }
 }
 

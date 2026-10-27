@@ -161,6 +161,13 @@ pub fn tick_migration(world: &mut World) {
             let src = i * culture::DIMS;
             let dst = target * culture::DIMS;
             world.culture_vec.copy_within(src..src + culture::DIMS, dst);
+            // Settlers carry their religion with them: a new tile inherits the
+            // source's belief, not a default.
+            let belief_src = i * crate::belief::AXES;
+            let belief_dst = target * crate::belief::AXES;
+            world
+                .belief
+                .copy_within(belief_src..belief_src + crate::belief::AXES, belief_dst);
             for k in 0..culture::DIMS {
                 let shift = (world.rng.random::<f32>() - 0.5) * 2.0 * FOUNDER_MUTATION;
                 world.culture_vec[dst + k] = (world.culture_vec[dst + k] + shift).clamp(0.0, 1.0);

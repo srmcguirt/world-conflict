@@ -34,7 +34,7 @@ impl Belief {
         capricious: 0.3,
         protective: 0.3,
         jealous: 0.2,
-        absent: 0.5,
+        absent: 0.35,
     };
 
     /// Flattens to the tile field's six-axis layout.

@@ -94,14 +94,23 @@ impl Power {
     }
 }
 
-/// One queued player action: what, where, and the tick it takes effect on.
+/// What a queued action does.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ActionKind {
+    Power { power: Power, x: usize, y: usize },
+    Anoint { culture_id: u16 },
+}
+
+/// One queued player action and the tick it takes effect on.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Action {
     pub tick: u64,
-    pub power: Power,
-    pub x: usize,
-    pub y: usize,
+    pub kind: ActionKind,
 }
+
+/// How much a witness learns about the god's character from seeing the act,
+/// before the outcome window measures what it did to them.
+pub const IMMEDIATE_EVIDENCE: f32 = 0.15;
 
 /// A witness tile waiting for its 5-tick outcome window to close.
 #[derive(Copy, Clone, Debug)]
@@ -145,6 +154,28 @@ pub fn apply(world: &mut World, power: Power, cx: usize, cy: usize) {
             world.expected_growth(tile),
             world.culture_id[tile],
         ));
+    }
+
+    // Seeing the god act is itself evidence, before any outcome lands: the
+    // people who watched learn what the god is like (design, Witness rule).
+    // The 5-tick window then sharpens it with what the act did to them.
+    for &(tile, ..) in &snapshots {
+        let current = world.belief_of(tile);
+        let updated = match power.intent() {
+            Polarity::Wrath => crate::belief::Belief {
+                wrathful: (current.wrathful + IMMEDIATE_EVIDENCE).min(1.0),
+                capricious: (current.capricious + IMMEDIATE_EVIDENCE * 0.4).min(1.0),
+                absent: (current.absent - IMMEDIATE_EVIDENCE * 0.5).max(0.0),
+                ..current
+            },
+            _ => crate::belief::Belief {
+                benevolent: (current.benevolent + IMMEDIATE_EVIDENCE).min(1.0),
+                protective: (current.protective + IMMEDIATE_EVIDENCE * 0.4).min(1.0),
+                absent: (current.absent - IMMEDIATE_EVIDENCE * 0.5).max(0.0),
+                ..current
+            },
+        };
+        world.set_belief(tile, updated);
     }
 
     let witnesses = promote(world, &footprint, power.witnesses_promoted());
@@ -238,14 +269,14 @@ pub fn verse_for(world: &World, power: Power, witness_id: u32) -> Option<(u16, V
         notable.culture_id,
         Verse {
             tick: world.tick(),
-            power,
+            kind: crate::scripture::VerseKind::Power(power),
             polarity: power.intent(),
             witness: notable.name.clone(),
             place,
             people: culture.name.clone(),
+            other: String::new(),
             witness_id: Some(witness_id),
             mutation: 0,
-            opening: false,
         },
     ))
 }

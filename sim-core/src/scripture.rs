@@ -4,6 +4,7 @@
 //! language drift (Milestone 5) can re-render the same verse in a descendant's
 //! words. GDScript only displays what `scripture_text` returns.
 
+use crate::faith::Doctrine;
 use crate::powers::Power;
 
 /// How the witness read the event.
@@ -17,42 +18,91 @@ pub enum Polarity {
     Silence,
 }
 
+/// What happened, as the people tell it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VerseKind {
+    /// The opening line of a scripture.
+    Genesis,
+    /// A power the people saw.
+    Power(Power),
+    /// A doctrine that crystallized.
+    Doctrine(Doctrine),
+    /// The god turned to one people and away from another.
+    Anoint { chosen: bool },
+}
+
 /// One line of holy text.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Verse {
     pub tick: u64,
-    pub power: Power,
+    pub kind: VerseKind,
     pub polarity: Polarity,
     pub witness: String,
     pub place: String,
     pub people: String,
+    /// The other people in an anointing; empty otherwise.
+    pub other: String,
     pub witness_id: Option<u32>,
     /// How far this copy has drifted from the original (language, Milestone 5).
     pub mutation: u8,
-    /// The opening verse of a scripture, not the record of a power.
-    pub opening: bool,
 }
 
 impl Verse {
     /// Renders the verse in the people's words.
     ///
-    /// `mutation` is 0 for Milestone 2; drift arrives with language.
+    /// `mutation` is 0 for Milestone 3; drift arrives with language.
     pub fn render(&self) -> String {
         let place = self.place.as_str();
         let people = format!("the {}", self.people);
         let witness = self.witness.as_str();
-        let text = if self.opening {
-            "In the beginning {god} set the first people at {place}, and they called themselves {people}. Act, and they will remember."
-        } else {
-            let lines = templates(self.power, self.polarity);
-            let pick = (crate::names::hash(self.witness.as_str()) as usize) % lines.len();
-            lines[pick]
+        let other = format!("the {}", self.other);
+        let text = match self.kind {
+            VerseKind::Genesis => {
+                "In the beginning {god} set the first people at {place}, and they called themselves {people}. Act, and they will remember."
+            }
+            VerseKind::Power(power) => {
+                let lines = templates(power, self.polarity);
+                let pick = (crate::names::hash(self.witness.as_str()) as usize) % lines.len();
+                lines[pick]
+            }
+            VerseKind::Doctrine(doctrine) => doctrine_lines(doctrine),
+            VerseKind::Anoint { chosen: true } => {
+                "In year {year}, {god} turned to {people} and away from {other}. {witness} was anointed, and the people raised a new altar at {place}."
+            }
+            VerseKind::Anoint { chosen: false } => {
+                "In year {year}, {god} turned away from {people} and toward {other}. {witness} said: we were not loved enough, and the people kept the old prayers."
+            }
         };
         text.replace("{year}", &self.tick.to_string())
             .replace("{witness}", witness)
             .replace("{place}", place)
             .replace("{people}", &people)
+            .replace("{other}", &other)
             .replace("{god}", crate::names::GOD_NAME)
+    }
+}
+
+/// A doctrine's founding verse: the prophet says what the god is.
+fn doctrine_lines(doctrine: Doctrine) -> &'static str {
+    match doctrine {
+        Doctrine::Wrathful => {
+            "In year {year}, {witness} rose among {people} and said: the Watcher is wrath, and wrath must be fed. The first altar was raised at {place}."
+        }
+        Doctrine::Benevolent => {
+            "In year {year}, {witness} rose among {people} and said: the Watcher gives, and we must give. The first hospice was opened at {place}."
+        }
+        Doctrine::Capricious => {
+            "In year {year}, {witness} rose among {people} and said: the Watcher is a wind that turns, and we must read the sky. The oracle was set at {place}."
+        }
+        Doctrine::Protective => {
+            "In year {year}, {witness} rose among {people} and said: the Watcher keeps a wall around those who keep it. The sacred stone was set at {place}."
+        }
+        Doctrine::Jealous => {
+            "In year {year}, {witness} rose among {people} and said: the Watcher counts our loves and will not be second. The people put away their other gods at {place}."
+        }
+        Doctrine::Absent => {
+            "In year {year}, {witness} rose among {people} and said: the Watcher has gone beyond the sky and left us the world. {place} built no altar."
+        }
     }
 }
 
@@ -130,14 +180,14 @@ fn templates(power: Power, polarity: Polarity) -> &'static [&'static str] {
 pub fn genesis(people: &str, place: &str) -> Verse {
     Verse {
         tick: 0,
-        power: Power::Bless,
+        kind: VerseKind::Genesis,
         polarity: Polarity::Mercy,
         witness: "the first people".to_string(),
         place: place.to_string(),
         people: people.to_string(),
+        other: String::new(),
         witness_id: None,
         mutation: 0,
-        opening: true,
     }
 }
 
@@ -148,14 +198,14 @@ mod tests {
     fn verse(power: Power, polarity: Polarity) -> Verse {
         Verse {
             tick: 12,
-            power,
+            kind: VerseKind::Power(power),
             polarity,
             witness: "Kareth".to_string(),
             place: "Suran".to_string(),
-            people: "the Melka".to_string(),
+            people: "Melka".to_string(),
+            other: String::new(),
             witness_id: Some(1),
             mutation: 0,
-            opening: false,
         }
     }
 
@@ -181,6 +231,15 @@ mod tests {
         assert!(text.starts_with("In the beginning"), "{text}");
         assert!(text.contains("Suran"));
         assert!(text.contains("the Karethi"));
+    }
+
+    #[test]
+    fn a_doctrine_verse_says_what_the_god_is() {
+        let mut verse = verse(Power::Bless, Polarity::Mercy);
+        verse.kind = VerseKind::Doctrine(Doctrine::Wrathful);
+        let text = verse.render();
+        assert!(text.contains("wrath"), "{text}");
+        assert!(text.contains("Kareth"));
     }
 
     #[test]

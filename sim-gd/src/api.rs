@@ -158,6 +158,39 @@ impl Sim {
         array
     }
 
+    /// A people's doctrine, or an empty string before one crystallizes.
+    #[func]
+    fn culture_doctrine(&self, id: i64) -> GString {
+        self.world
+            .cultures()
+            .get(id as usize)
+            .and_then(|culture| culture.doctrine)
+            .map(|doctrine| GString::from(doctrine.name()))
+            .unwrap_or_default()
+    }
+
+    /// A people's piety, 0 to 1.
+    #[func]
+    fn culture_piety(&self, id: i64) -> f64 {
+        self.world
+            .cultures()
+            .get(id as usize)
+            .map(|culture| culture.piety as f64)
+            .unwrap_or(0.0)
+    }
+
+    /// How many religions exist.
+    #[func]
+    fn faith_count(&self) -> i64 {
+        self.world.faiths().len() as i64
+    }
+
+    /// Anoints a people, at the next tick (design D11).
+    #[func]
+    fn anoint(&mut self, culture_id: i64) {
+        self.guarded(|world| world.queue_anoint(culture_id.max(0) as u16));
+    }
+
     /// How many witnesses are alive, and the newest witness's name.
     #[func]
     fn witness_count(&self) -> i64 {

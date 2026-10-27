@@ -49,8 +49,14 @@ fn the_action_log_records_the_tick_the_power_and_the_tile() {
 
     let action = world.actions().last().expect("one action");
     assert_eq!(action.tick, 1);
-    assert_eq!(action.power, Power::Meteor);
-    assert_eq!((action.x, action.y), (x, y));
+    assert_eq!(
+        action.kind,
+        sim_core::powers::ActionKind::Power {
+            power: Power::Meteor,
+            x,
+            y
+        }
+    );
 }
 
 #[test]

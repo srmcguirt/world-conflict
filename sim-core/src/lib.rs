@@ -14,6 +14,7 @@
 pub mod belief;
 pub mod culture;
 pub mod demography;
+pub mod faith;
 pub mod names;
 pub mod notables;
 pub mod powers;
