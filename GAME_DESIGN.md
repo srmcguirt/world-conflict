@@ -221,7 +221,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
 - **Exposed to Godot** as a single `#[derive(GodotClass)] Sim` node API:
   - `step(years)`
   - `apply_power(kind, x, y, params)`
-  - `drain_events() -> Array[Dictionary]`
+  - `drain_events() -> Dictionary` — `{events: [{tick, kind, culture, tile, polity, text}], dropped}`, oldest first, text already in words; `dropped` is R4's count *(revised 2026-10-27: the shape built in M6a; the first kinds are tier_up, tier_down, building, kingdom, government, protest and riot)*
   - `scripture_text(culture_id, from, count) -> PackedStringArray`
   - `reanoint(culture_id)`
   - `paint_overlay(mode) -> PackedByteArray` (RGBA for the map `Image`)

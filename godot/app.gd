@@ -199,6 +199,10 @@ func _ui_tour() -> void:
 	game._select_tile(tile)
 
 	await _capture("ui-play-log-selection")
+	var kingdom: int = game.sim.polity_at_tile(tile.x, tile.y)
+	if kingdom >= 0:
+		game._show_polity(kingdom)
+		await _capture("ui-polity")
 	_open_menu()
 	await _capture("ui-esc-menu")
 	_open_settings(_open_menu_again)
@@ -207,12 +211,16 @@ func _ui_tour() -> void:
 
 
 func _first_settlement_tile() -> Vector2i:
+	# The Chosen's biggest settlement, which is the likeliest to head a kingdom.
 	var sites: PackedInt32Array = game.sim.settlement_sites()
 	var w: int = game.grid_w
+	var best := Vector2i(w / 2, 10)
+	var best_tier := -1
 	for s in range(0, sites.size(), 4):
-		if sites[s + 2] == game.chosen:
-			return Vector2i(sites[s] % w, sites[s] / w)
-	return Vector2i(w / 2, 10)
+		if sites[s + 2] == game.chosen and sites[s + 1] > best_tier:
+			best_tier = sites[s + 1]
+			best = Vector2i(sites[s] % w, sites[s] / w)
+	return best
 
 
 func _capture(name: String, settle: float = 0.4) -> void:

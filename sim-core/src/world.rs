@@ -137,6 +137,8 @@ pub struct World {
     pub(crate) tile_polity: Vec<u16>,
     /// Every settlement, indexed by settlement id.
     pub(crate) settlements: Vec<Settlement>,
+    /// Kingdom events waiting for the UI (R4); not part of the sim's state.
+    pub(crate) events: crate::events::EventQueue,
     /// Which settlement claims each tile, or `u32::MAX` if none.
     pub(crate) settlement_of: Vec<u32>,
 }
@@ -185,6 +187,7 @@ impl World {
             faiths: Vec::new(),
             languages: Vec::new(),
             settlements: Vec::new(),
+            events: crate::events::EventQueue::default(),
             polities: Vec::new(),
             tile_polity: vec![u16::MAX; GRID_WIDTH * GRID_HEIGHT],
             settlement_of: vec![u32::MAX; GRID_WIDTH * GRID_HEIGHT],
@@ -354,6 +357,12 @@ impl World {
     }
 
     /// Every polity, indexed by polity id.
+    /// Every kingdom event since the last drain, oldest first, and how many
+    /// were dropped because the UI fell behind (R4).
+    pub fn drain_events(&mut self) -> (Vec<crate::events::Event>, u64) {
+        self.events.drain()
+    }
+
     pub fn polities(&self) -> &[society::Polity] {
         &self.polities
     }
@@ -433,8 +442,10 @@ impl World {
 
     /// Promotes the person on `tile` to witness, returning their id.
     ///
-    /// Enforces the witness and culture budgets: the lowest-salience member of
-    /// a full budget becomes a legend (design, Individual budgets).
+    /// Enforces every budget a new witness counts against, in the design's
+    /// order: the witness budget, the person's own people's budget, then the
+    /// global cap. Each full budget sends its lowest-salience member to legend
+    /// (design, Individual budgets).
     pub fn promote_witness(&mut self, tile: usize) -> Option<u32> {
         let culture_id = self.culture_id[tile];
         let culture = self.cultures.get(culture_id as usize)?;
@@ -446,7 +457,9 @@ impl World {
         } else {
             Budget::Other
         };
+        self.evict_for(Budget::Witness, culture_id);
         self.evict_for(budget, culture_id);
+        self.make_room_under_global_cap();
 
         let id = self.next_notable_id;
         self.next_notable_id += 1;
@@ -522,6 +535,22 @@ impl World {
                     verse.render()
                 )
             })
+            .collect()
+    }
+
+    /// The year of each verse [`World::scripture_text`] returns, in the same
+    /// order, so the event log can interleave verses and kingdom events.
+    pub fn scripture_ticks(&self, culture_id: u16, from: usize, count: usize) -> Vec<u64> {
+        let Some(culture) = self.cultures.get(culture_id as usize) else {
+            return Vec::new();
+        };
+        culture
+            .scripture
+            .iter()
+            .rev()
+            .skip(from)
+            .take(count)
+            .map(|verse| verse.tick)
             .collect()
     }
 
@@ -660,18 +689,12 @@ impl World {
             .iter()
             .enumerate()
             .filter(|(_, notable)| match budget {
-                Budget::Witness => true,
+                Budget::Witness => notable.role == Role::Witness,
                 Budget::Chosen | Budget::Other => notable.culture_id == culture_id,
             })
             .map(|(index, _)| index)
             .collect();
-        let witnesses = self.witnesses().len();
-        let full = match budget {
-            Budget::Witness => witnesses >= notables::WITNESS_BUDGET,
-            Budget::Chosen => members.len() >= notables::CHOSEN_BUDGET,
-            Budget::Other => members.len() >= notables::OTHER_BUDGET,
-        };
-        if !full {
+        if members.len() < notables::cap(budget) {
             return;
         }
         members.sort_by(|&a, &b| {
@@ -681,16 +704,42 @@ impl World {
                 .then(a.cmp(&b))
         });
         if let Some(&index) = members.first() {
-            let evicted = self.notables.remove(index);
-            self.legends.push(Legend {
-                id: evicted.id,
-                culture_id: evicted.culture_id,
-                name: evicted.name,
-                born_tick: evicted.born_tick,
-                died_tick: self.tick,
-                role: evicted.role,
-            });
+            self.retire_to_legend(index);
         }
+    }
+
+    /// At the global cap the lowest-salience witness goes first, then the
+    /// lowest-salience notable of an `Other` people; the Chosen's notables are
+    /// never evicted by the cap (design, Individual budgets).
+    fn make_room_under_global_cap(&mut self) {
+        if self.notables.len() < notables::GLOBAL_CAP {
+            return;
+        }
+        let dimmest = |keep: &dyn Fn(&Notable) -> bool| {
+            self.notables
+                .iter()
+                .enumerate()
+                .filter(|(_, notable)| keep(notable))
+                .min_by(|(a, x), (b, y)| x.salience.total_cmp(&y.salience).then(a.cmp(b)))
+                .map(|(index, _)| index)
+        };
+        let witness = dimmest(&|notable| notable.role == Role::Witness);
+        let index = witness.or_else(|| dimmest(&|notable| !self.is_chosen(notable.culture_id)));
+        if let Some(index) = index {
+            self.retire_to_legend(index);
+        }
+    }
+
+    fn retire_to_legend(&mut self, index: usize) {
+        let retired = self.notables.remove(index);
+        self.legends.push(Legend {
+            id: retired.id,
+            culture_id: retired.culture_id,
+            name: retired.name,
+            born_tick: retired.born_tick,
+            died_tick: self.tick,
+            role: retired.role,
+        });
     }
 
     /// Advances the simulation by `years` whole sim-years.
@@ -735,6 +784,7 @@ impl World {
             faith::tick_doctrine_effects(self);
         }
         if self.tick.is_multiple_of(25) {
+            let kingdoms = crate::events::snapshot(self);
             culture::tick_splits(self);
             culture::refresh_aggregates(self);
             language::tick_languages(self);
@@ -743,6 +793,7 @@ impl World {
             society::tick_polities(self);
             faith::tick_doctrines(self);
             faith::tick_schisms(self);
+            crate::events::record_changes(self, &kingdoms);
         }
     }
 }
@@ -750,6 +801,176 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A culture id no real people holds, so stuffed notables never touch a
+    /// real people's own budget.
+    const STRANGERS: u16 = 999;
+
+    fn stuffed(id: u32, role: Role, salience: f32) -> Notable {
+        Notable {
+            id,
+            culture_id: STRANGERS,
+            name: format!("stuffed {id}"),
+            tile: 0,
+            born_tick: 0,
+            role,
+            salience,
+            skin: 0.5,
+            stature: 0.5,
+        }
+    }
+
+    fn settled_tile(world: &World) -> usize {
+        (0..world.population.len())
+            .find(|&i| world.population[i] >= 1.0 && world.culture_id[i] != NO_CULTURE)
+            .expect("a settled tile")
+    }
+
+    fn is_legend(world: &World, id: u32) -> bool {
+        world.legends.iter().any(|legend| legend.id == id)
+    }
+
+    #[test]
+    fn the_witness_budget_evicts_the_dimmest_witness_and_only_a_witness() {
+        let mut world = World::new(1);
+        world.step(200);
+        // 300 witnesses, the dimmest of them id 150, plus a prophet dimmer
+        // still: the witness budget must not reach the prophet.
+        for id in 0..300 {
+            let salience = if id == 150 { 0.2 } else { 1.0 + id as f32 };
+            world.notables.push(stuffed(id, Role::Witness, salience));
+        }
+        world.notables.push(stuffed(300, Role::Prophet, 0.1));
+        world.next_notable_id = 1_000;
+
+        let tile = settled_tile(&world);
+        let new = world.promote_witness(tile).expect("promoted");
+
+        assert_eq!(world.witnesses().len(), notables::WITNESS_BUDGET);
+        assert!(
+            is_legend(&world, 150),
+            "the dimmest witness becomes a legend"
+        );
+        assert!(!is_legend(&world, 300), "a prophet is not a witness");
+        assert!(world.notables.iter().any(|notable| notable.id == new));
+    }
+
+    #[test]
+    fn under_the_budget_no_witness_is_evicted() {
+        let mut world = World::new(1);
+        world.step(200);
+        for id in 0..299 {
+            world.notables.push(stuffed(id, Role::Witness, 1.0));
+        }
+        world.next_notable_id = 1_000;
+        world.promote_witness(settled_tile(&world));
+        assert_eq!(world.witnesses().len(), notables::WITNESS_BUDGET);
+        assert!(world.legends.is_empty());
+    }
+
+    #[test]
+    fn the_global_cap_takes_witnesses_before_other_notables() {
+        let mut world = World::new(1);
+        world.step(200);
+        // 2,000 individuals: 250 witnesses (under their own budget) and 1,750
+        // prophets of a stranger people, one of them dimmer than any witness.
+        for id in 0..250 {
+            world
+                .notables
+                .push(stuffed(id, Role::Witness, 5.0 + id as f32));
+        }
+        for id in 250..2_000 {
+            let salience = if id == 1_000 { 0.1 } else { 10.0 };
+            world.notables.push(stuffed(id, Role::Prophet, salience));
+        }
+        world.next_notable_id = 5_000;
+
+        world.promote_witness(settled_tile(&world));
+
+        assert_eq!(world.notables.len(), notables::GLOBAL_CAP);
+        assert!(is_legend(&world, 0), "the dimmest witness goes first");
+        assert!(
+            !is_legend(&world, 1_000),
+            "Other notables wait behind witnesses"
+        );
+    }
+
+    #[test]
+    fn the_chosen_draw_on_their_own_larger_budget() {
+        // 15 notables fill an Other people's budget but not the Chosen's 200.
+        let mut world = World::new(1);
+        world.step(1_500);
+        let tile_of = |world: &World, chosen: bool| {
+            (0..world.population.len())
+                .find(|&i| {
+                    world.population[i] >= 1.0
+                        && world.culture_id[i] != NO_CULTURE
+                        && world.is_chosen(world.culture_id[i]) == chosen
+                })
+                .expect("a settled tile of each kind")
+        };
+        world.notables.clear();
+        world.next_notable_id = 1_000;
+        for (chosen, first_id) in [(true, 0), (false, 100)] {
+            let tile = tile_of(&world, chosen);
+            let culture_id = world.culture_id[tile];
+            for id in first_id..first_id + notables::OTHER_BUDGET as u32 {
+                world.notables.push(Notable {
+                    culture_id,
+                    ..stuffed(id, Role::Prophet, 10.0)
+                });
+            }
+            world.promote_witness(tile).expect("promoted");
+        }
+        let lost: Vec<u32> = world.legends.iter().map(|legend| legend.id).collect();
+        assert!(
+            lost.iter().all(|&id| id >= 100),
+            "no Chosen notable was evicted: {lost:?}"
+        );
+        assert_eq!(lost.len(), 1, "the Other people's full budget gave up one");
+    }
+
+    #[test]
+    fn a_new_witness_takes_the_next_id_and_its_own_tiles_look() {
+        let mut world = World::new(1);
+        world.step(200);
+        let tile = settled_tile(&world);
+        world.traits[tile * traits::TRAITS + traits::SKIN] = 0.81;
+        world.traits[tile * traits::TRAITS + traits::STATURE] = 0.23;
+        let first = world.promote_witness(tile).expect("promoted");
+        let second = world.promote_witness(tile).expect("promoted");
+        assert_eq!(second, first + 1);
+        assert_eq!(world.next_notable_id, second + 1);
+        let witness = world
+            .notables
+            .iter()
+            .find(|notable| notable.id == second)
+            .expect("the witness lives");
+        assert!(
+            (witness.skin - 0.81).abs() < 1e-6,
+            "skin comes from the tile"
+        );
+        assert!(
+            (witness.stature - 0.23).abs() < 1e-6,
+            "stature comes from the tile"
+        );
+    }
+
+    #[test]
+    fn with_no_witness_left_the_global_cap_takes_the_dimmest_other_notable() {
+        let mut world = World::new(1);
+        world.step(200);
+        for id in 0..2_000 {
+            let salience = if id == 1_234 { 0.1 } else { 10.0 };
+            world.notables.push(stuffed(id, Role::Prophet, salience));
+        }
+        world.next_notable_id = 5_000;
+
+        world.promote_witness(settled_tile(&world));
+
+        assert_eq!(world.notables.len(), notables::GLOBAL_CAP);
+        assert!(is_legend(&world, 1_234));
+    }
 
     #[test]
     fn step_advances_one_sim_year_per_tick() {

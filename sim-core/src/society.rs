@@ -351,6 +351,22 @@ pub fn tick_unrest(world: &mut World) {
         }
         // Protest: write a verse for the culture's scripture.
         let ci = culture_id as usize;
+        let capital = world
+            .polities
+            .iter()
+            .find(|p| p.id == polity_id)
+            .map(|p| p.capital);
+        let tile = capital.map_or(0, |id| crate::events::capital_tile(world, id));
+        let kingdom_event = |kind| crate::events::Event {
+            tick: world.tick(),
+            kind,
+            culture_id,
+            tile,
+            polity_id: Some(polity_id),
+        };
+        let protest = kingdom_event(crate::events::EventKind::Protest);
+        let riot = kingdom_event(crate::events::EventKind::Riot);
+        world.events.push(protest);
         if ci < world.cultures.len() {
             let place = if let Some(settlement) = world.settlements.iter().find(|s| {
                 world
@@ -378,44 +394,49 @@ pub fn tick_unrest(world: &mut World) {
         }
 
         if unrest >= 0.65 {
-            // Riot: -2% population in the largest settlement, one building damaged.
-            let largest_settlement =
-                world
-                    .polities
-                    .iter()
-                    .find(|p| p.id == polity_id)
-                    .and_then(|p| {
-                        p.settlements
-                            .iter()
-                            .filter_map(|&sid| world.settlements.iter().find(|s| s.id == sid))
-                            .max_by(|a, b| a.population.total_cmp(&b.population))
-                            .map(|s| s.id)
-                    });
-            if let Some(sid) = largest_settlement
-                && let Some(settlement) = world.settlements.iter_mut().find(|s| s.id == sid)
+            world.events.push(riot);
+            riot_in(world, polity_id);
+        }
+    }
+}
+
+/// Riot: -2% population in the polity's largest settlement, one building
+/// damaged.
+fn riot_in(world: &mut World, polity_id: u32) {
+    let largest_settlement = world
+        .polities
+        .iter()
+        .find(|p| p.id == polity_id)
+        .and_then(|p| {
+            p.settlements
+                .iter()
+                .filter_map(|&sid| world.settlements.iter().find(|s| s.id == sid))
+                .max_by(|a, b| a.population.total_cmp(&b.population))
+                .map(|s| s.id)
+        });
+    if let Some(sid) = largest_settlement
+        && let Some(settlement) = world.settlements.iter_mut().find(|s| s.id == sid)
+    {
+        // Remove 2% of the settlement's population from its catchment.
+        let loss = settlement.population * 0.02;
+        // Distribute the loss across catchment tiles.
+        let tiles = settlement.catchment.clone();
+        let per_tile = loss / tiles.len().max(1) as f32;
+        for t in &tiles {
+            world.population[*t] = (world.population[*t] - per_tile).max(0.0);
+        }
+        settlement.population = settlement
+            .catchment
+            .iter()
+            .map(|&t| world.population[t])
+            .sum();
+        // Damage one building.
+        for slot in &mut settlement.slots {
+            if let Some(b) = slot
+                && b.level > 0
             {
-                // Remove 2% of the settlement's population from its catchment.
-                let loss = settlement.population * 0.02;
-                // Distribute the loss across catchment tiles.
-                let tiles = settlement.catchment.clone();
-                let per_tile = loss / tiles.len().max(1) as f32;
-                for t in &tiles {
-                    world.population[*t] = (world.population[*t] - per_tile).max(0.0);
-                }
-                settlement.population = settlement
-                    .catchment
-                    .iter()
-                    .map(|&t| world.population[t])
-                    .sum();
-                // Damage one building.
-                for slot in &mut settlement.slots {
-                    if let Some(b) = slot
-                        && b.level > 0
-                    {
-                        b.level = b.level.saturating_sub(1);
-                        break;
-                    }
-                }
+                b.level = b.level.saturating_sub(1);
+                break;
             }
         }
     }

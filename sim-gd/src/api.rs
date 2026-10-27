@@ -195,6 +195,91 @@ impl Sim {
         array
     }
 
+    /// The year of each verse `scripture()` returns, in the same order.
+    #[func]
+    fn scripture_years(&self, culture_id: i64, from: i64, count: i64) -> PackedInt64Array {
+        self.world
+            .scripture_ticks(
+                culture_id.max(0) as u16,
+                from.max(0) as usize,
+                count.clamp(1, 200) as usize,
+            )
+            .into_iter()
+            .map(|tick| tick as i64)
+            .collect()
+    }
+
+    /// Every kingdom event since the last call, oldest first, already in words
+    /// (design, typed events; R4): `{events: [{tick, kind, culture, tile,
+    /// polity, text}], dropped}`. `dropped` counts events the queue let go
+    /// because nobody drained it in time.
+    #[func]
+    fn drain_events(&mut self) -> VarDictionary {
+        let (events, dropped) = self.world.drain_events();
+        let mut list = VarArray::new();
+        for event in &events {
+            let entry = vdict! {
+                "tick" => &(event.tick as i64).to_variant(),
+                "kind" => &sim_core::events::label(event.kind).to_variant(),
+                "culture" => &i64::from(event.culture_id).to_variant(),
+                "tile" => &(event.tile as i64).to_variant(),
+                "polity" => &event.polity_id.map_or(-1, i64::from).to_variant(),
+                "text" => &sim_core::events::describe(&self.world, event).to_variant(),
+            };
+            list.push(&entry.to_variant());
+        }
+        vdict! {
+            "events" => &list.to_variant(),
+            "dropped" => &(dropped as i64).to_variant(),
+        }
+    }
+
+    /// One kingdom for the polity panel (design, Meters DR2-D2; M6a plan,
+    /// Polity panel), or an empty dictionary when no polity has that id.
+    /// Rival kingdoms' meters are shown only while one of their people is a
+    /// living witness (design, Open question 2: the proposal); `visible` says
+    /// which.
+    #[func]
+    fn polity_card(&self, id: i64) -> VarDictionary {
+        let world = &self.world;
+        let Some(polity) = world.polities().iter().find(|p| i64::from(p.id) == id) else {
+            return VarDictionary::new();
+        };
+        let capital = sim_core::events::capital_tile(world, polity.capital);
+        let culture = world.cultures().get(polity.culture_id as usize);
+        let people = culture.map_or(String::new(), |c| c.name.clone());
+        let place = culture.map_or(String::new(), |c| sim_core::names::place_name(c, capital));
+        let visible = world.is_chosen(polity.culture_id)
+            || world.notables().iter().any(|n| {
+                n.culture_id == polity.culture_id && n.role == sim_core::notables::Role::Witness
+            });
+        let source = match polity.government {
+            sim_core::society::Government::Theocracy => "piety",
+            sim_core::society::Government::Chiefdom => "prosperity",
+            // Design: a monarchy's legitimacy is its dynasty's renown; until
+            // rulers exist (M6a plan, D7) society.rs holds it at 0.5.
+            sim_core::society::Government::Monarchy => "the dynasty",
+            sim_core::society::Government::Band => "custom",
+        };
+        vdict! {
+            "people" => &people.to_variant(),
+            "capital" => &place.to_variant(),
+            "capital_tile" => &(capital as i64).to_variant(),
+            "chosen" => &world.is_chosen(polity.culture_id).to_variant(),
+            "visible" => &visible.to_variant(),
+            "government" => &polity.government.name().to_variant(),
+            "legitimacy_source" => &source.to_variant(),
+            "settlements" => &(polity.settlements.len() as i64).to_variant(),
+            "prosperity" => &f64::from(polity.prosperity).to_variant(),
+            "inequality" => &f64::from(polity.inequality).to_variant(),
+            "legitimacy" => &f64::from(polity.legitimacy).to_variant(),
+            "piety" => &f64::from(polity.piety).to_variant(),
+            "cohesion" => &f64::from(polity.cohesion).to_variant(),
+            "unrest" => &f64::from(polity.unrest).to_variant(),
+            "liberty" => &f64::from(polity.liberty).to_variant(),
+        }
+    }
+
     /// A people's doctrine, or an empty string before one crystallizes.
     #[func]
     fn culture_doctrine(&self, id: i64) -> GString {

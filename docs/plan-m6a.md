@@ -266,6 +266,25 @@ inverse 2:1 projection with no rotation term.
 the mesh; the overlay cycle, the HUD and the event log are unchanged. The
 design's "no TileMapLayer" clause survives — this is not a TileMap.
 
+## Status (2026-10-27)
+
+Built and on `main` or this branch:
+- **Polity panel:** the six meters as bars with numbers in the design table's
+  order, unrest's thresholds under it, Liberty, government and legitimacy
+  source, capital, settlement count and recent unrest. The design names
+  danger thresholds only for unrest, so the meters keep the table's order
+  instead of "worst first". Rival meters show only while one of that people is
+  a witness, which is Open question 2's proposal, not yet a decision.
+- **Kingdom events:** `events.rs` with R4's bounded queue; the log feeds the
+  Chosen's tier changes, buildings (one line per year), new kingdoms and
+  government changes beside their verses, and each event flies the camera to
+  its place. Protests stay as verses.
+- **Witness budget:** the 300 cap and the 2,000 global cap are enforced on
+  promotion, with tests that fail on the old code.
+
+Still open: a monarchy's legitimacy is fixed at 0.5 until rulers exist (D7);
+the family-line panel waits for M6b/M7 (D8).
+
 ## GSTACK REVIEW REPORT
 
 ```

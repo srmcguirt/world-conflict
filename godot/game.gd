@@ -64,6 +64,11 @@ var _frame_label: Label
 var _power_buttons: Array[Button] = []
 var _selection_panel: PanelContainer
 var _selection_label: Label
+var _kingdom_row: HBoxContainer
+var _kingdom_label: Label
+var _polity_panel: PolityPanel
+var _shown_polity := -1
+var _history: Array[Dictionary] = []  # recent kingdom events, every people's, oldest first
 var _log: EventLog
 
 var _pressing := false
@@ -135,6 +140,8 @@ func finish() -> void:
 	camera.reset_smoothing()
 	repaint_if_dirty()
 	_log.set_culture(chosen)
+	_drain_events()
+	_log.refresh(true)
 	apply_settings()
 
 
@@ -198,9 +205,32 @@ func _build_hud() -> void:
 	_selection_panel.visible = false
 	_selection_panel.custom_minimum_size = Vector2(240, 0)
 	_selection_panel.set_meta("slot", "selection")
+	var card := VBoxContainer.new()
+	card.add_theme_constant_override("separation", 6)
+	_selection_panel.add_child(card)
 	_selection_label = Label.new()
-	_selection_panel.add_child(_selection_label)
+	card.add_child(_selection_label)
+	# The settlement card's kingdom strip (design, Meters DR2-D2).
+	_kingdom_row = HBoxContainer.new()
+	_kingdom_row.add_theme_constant_override("separation", 8)
+	_kingdom_label = UiTheme.muted("", 12)
+	_kingdom_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_kingdom_row.add_child(_kingdom_label)
+	var open := Button.new()
+	open.text = "Open kingdom"
+	open.focus_mode = Control.FOCUS_NONE
+	open.pressed.connect(func() -> void: _show_polity(_shown_polity))
+	_kingdom_row.add_child(open)
+	card.add_child(_kingdom_row)
 	ui.add_child(_selection_panel)
+
+	_polity_panel = PolityPanel.new()
+	_polity_panel.theme = theme
+	_polity_panel.visible = false
+	_polity_panel.set_meta("slot", "selection")
+	_polity_panel.focus_requested.connect(_focus_tile)
+	ui.add_child(_polity_panel)
+	_log.focus_requested.connect(_focus_tile)
 	get_viewport().size_changed.connect(_layout_hud)
 
 
@@ -279,6 +309,7 @@ func _run_budgeted(delta: float) -> void:
 			break
 	if ran > 0:
 		repaint_if_dirty()
+		_drain_events()
 		_log.refresh()
 
 
@@ -471,9 +502,29 @@ func _on_map_click() -> void:
 		if paused:
 			sim.step(1)
 		repaint_if_dirty()
+		_drain_events()
 		_log.refresh()
 		return
 	_select_tile(tile)
+
+
+# Kingdom events reach the log (the Chosen's) and the polity panel's unrest
+# list (any kingdom's) through one drain per frame (design, typed events; R4).
+func _drain_events() -> void:
+	var drained: Dictionary = sim.drain_events()
+	var events: Array = drained["events"]
+	_log.add_events(events, drained["dropped"])
+	for event in events:
+		_history.append(event)
+	if _history.size() > 400:
+		_history = _history.slice(_history.size() - 400)
+	if _polity_panel.visible:
+		_show_polity(_shown_polity)
+
+
+func _focus_tile(tile: int) -> void:
+	camera.position = terrain.top(tile % grid_w, tile / grid_w)
+	_select_tile(Vector2i(tile % grid_w, tile / grid_w))
 
 
 # Arms a power, or disarms it when its own key or button is pressed again.
@@ -487,6 +538,7 @@ func _toggle_power(index: int) -> void:
 func _clear_selection() -> void:
 	selected_tile = Vector2i(-1, -1)
 	_selection_panel.visible = false
+	_polity_panel.visible = false
 	selection_ring.visible = false
 
 
@@ -503,16 +555,32 @@ func _select_tile(tile: Vector2i) -> void:
 				"%s of the %s\n%d people · %d of %d buildings"
 				% [TIERS[clampi(card[1], 0, 3)], sim.culture_name(card[2]), card[4], card[3], card[5]]
 			)
-			_show_selection()
+			_shown_polity = sim.polity_at_tile(card[0] % grid_w, card[0] / grid_w)
+			_kingdom_row.visible = _shown_polity >= 0
+			if _shown_polity >= 0:
+				var kingdom: Dictionary = sim.polity_card(_shown_polity)
+				var strip := "Kingdom of %s · %s" % [kingdom["capital"], kingdom["government"]]
+				if kingdom["visible"]:
+					strip += " · unrest %.2f" % kingdom["unrest"]
+				_kingdom_label.text = strip
+			_selection_panel.visible = true
+			_layout_hud.call_deferred()
 			return
 	var pid: int = sim.polity_at_tile(tile.x, tile.y)
 	if pid >= 0:
-		_selection_label.text = "Polity %d\ntile %d, %d" % [pid, tile.x, tile.y]
-		_show_selection()
+		_show_polity(pid)
 
 
-func _show_selection() -> void:
-	_selection_panel.visible = true
+func _show_polity(pid: int) -> void:
+	_shown_polity = pid
+	var unrest: Array = []
+	for i in range(_history.size() - 1, -1, -1):
+		var event: Dictionary = _history[i]
+		if event["polity"] == pid and (event["kind"] == "protest" or event["kind"] == "riot"):
+			unrest.append(event)
+	_polity_panel.show_polity(sim.polity_card(pid), unrest)
+	_selection_panel.visible = false
+	_polity_panel.visible = true
 	_layout_hud.call_deferred()
 
 
