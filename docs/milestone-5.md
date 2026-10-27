@@ -68,15 +68,20 @@ The design (Milestones) makes M5 the first released build. Build commands for
 the universal macOS zip (the itch.io upload itself is manual):
 
 ```bash
-cargo build --release -p sim-gd          # cdylib
-cd godot
-# aarch64 and x86_64 layers, then lipo:
-#   rustup target add x86_64-apple-darwin (once)
-#   cargo build --release -p sim-gd --target x86_64-apple-darwin
-#   lipo -create -output libsim_gd.dylib \
-#     ../target/release/libsim_gd.dylib \
-#     ../target/x86_64-apple-darwin/release/libsim_gd.dylib
-#   place libsim_gd.dylib in godot/project sim folder, export via Godot editor
+cargo build --release -p sim-gd          # aarch64 layer
+# x86_64 layer (once): rustup target add x86_64-apple-darwin
+# NOTE: if Homebrew's cargo shadows rustup's in PATH, the cross-target std
+# is invisible and the build fails with "can't find crate for `core`".
+# Use rustup's cargo explicitly:
+PATH="$HOME/.cargo/bin:$PATH" cargo build --release -p sim-gd --target x86_64-apple-darwin
+mkdir -p target/universal
+lipo -create -output target/universal/libsim_gd.dylib \
+  target/release/libsim_gd.dylib \
+  target/x86_64-apple-darwin/release/libsim_gd.dylib
+# Verified on 2026-10-27: the fat dylib loads in Godot 4.7.2 headless and
+# smoke_cast.gd runs. Export the Godot project as a macOS .app with
+# target/universal/libsim_gd.dylib in place of the gdextension's dylib,
+# ad-hoc sign (codesign --force --deep -s -), zip, and butler push to itch.io.
 ```
 
 Included in the build: the map, seven powers, witnesses and scripture in each
