@@ -10,7 +10,7 @@
 use rand::Rng;
 
 use crate::culture::{self, NO_CULTURE};
-use crate::world::{GRID_HEIGHT, GRID_WIDTH, World};
+use crate::world::{GRID_WIDTH, World};
 use crate::worldgen::{self, Biome};
 
 /// People at Eden when the world starts.
@@ -201,30 +201,24 @@ fn migration_target(world: &World, from: usize) -> Option<usize> {
     let (x, y) = (from % GRID_WIDTH, from / GRID_WIDTH);
     for radius in 1..=WAVE_RADIUS {
         let mut best: Option<(f32, usize)> = None;
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx.abs() != radius && dy.abs() != radius {
-                    continue;
-                }
-                let ny = y as i32 + dy;
-                if ny < 0 || ny >= GRID_HEIGHT as i32 {
-                    continue;
-                }
-                let nx = (x as i32 + dx).rem_euclid(GRID_WIDTH as i32);
-                let n = ny as usize * GRID_WIDTH + nx as usize;
-                let room = room_at(world, n);
-                if room <= 0.0 {
-                    continue;
-                }
-                let lat = worldgen::latitude_deg(ny as usize);
-                let cost = culture::step_cost(world.biome[n], lat, dx != 0);
-                if !cost.is_finite() {
-                    continue;
-                }
-                let score = room / cost;
-                if best.is_none_or(|(best_score, _)| score > best_score) {
-                    best = Some((score, n));
-                }
+        for &(nx, ny) in &crate::hex::disc(x, y, radius as u32) {
+            if crate::hex::distance(x, y, nx, ny) != radius as u32 {
+                continue;
+            }
+            let n = ny * GRID_WIDTH + nx;
+            let room = room_at(world, n);
+            if room <= 0.0 {
+                continue;
+            }
+            let lat = worldgen::latitude_deg(ny);
+            let dx = nx as i32 - x as i32;
+            let cost = culture::step_cost(world.biome[n], lat, dx != 0);
+            if !cost.is_finite() {
+                continue;
+            }
+            let score = room / cost;
+            if best.is_none_or(|(best_score, _)| score > best_score) {
+                best = Some((score, n));
             }
         }
         if let Some((_, target)) = best {

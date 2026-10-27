@@ -15,6 +15,7 @@ pub mod belief;
 pub mod culture;
 pub mod demography;
 pub mod faith;
+pub mod hex;
 pub mod language;
 pub mod names;
 pub mod notables;

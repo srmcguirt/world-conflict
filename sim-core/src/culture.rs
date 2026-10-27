@@ -246,25 +246,9 @@ pub fn biome_target(biome: Biome) -> [f32; DIMS] {
     }
 }
 
-/// The 8 neighbors of a tile, east-west wrapping (design, Grid).
+/// The six neighbors of a tile, east-west wrapping (design, Grid).
 pub fn neighbors(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
-    let mut out = [(0, 0); 8];
-    let mut n = 0;
-    for dy in -1i32..=1 {
-        for dx in -1i32..=1 {
-            if dx == 0 && dy == 0 {
-                continue;
-            }
-            let ny = y as i32 + dy;
-            if ny < 0 || ny >= GRID_HEIGHT as i32 {
-                continue;
-            }
-            let nx = (x as i32 + dx).rem_euclid(GRID_WIDTH as i32);
-            out[n] = (nx as usize, ny as usize);
-            n += 1;
-        }
-    }
-    out.into_iter().take(n)
+    crate::hex::neighbors(x, y)
 }
 
 /// Connected components of `culture_id`'s settled tiles, 8-neighbor.
@@ -592,9 +576,9 @@ mod tests {
 
     #[test]
     fn neighbor_count_shrinks_at_the_poles_but_wraps_east_west() {
-        assert_eq!(neighbors(0, 0).count(), 5);
-        assert_eq!(neighbors(0, 40).count(), 8);
-        assert_eq!(neighbors(GRID_WIDTH - 1, 40).count(), 8, "east edge wraps");
+        assert_eq!(neighbors(0, 0).count(), 4);
+        assert_eq!(neighbors(0, 40).count(), 6);
+        assert_eq!(neighbors(GRID_WIDTH - 1, 40).count(), 6, "east edge wraps");
     }
 
     #[test]

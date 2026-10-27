@@ -68,7 +68,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - beliefs and identity: `belief[m]` (m≈6 axes), `language_id`, `polity_id`;
   - resources: `resource` flags.
 - **Grid:**
-  - an equirectangular tile grid that wraps east to west, with temperature driven by latitude;
+  - an odd-r flat-top hex grid that wraps east to west (design, Grid), with temperature driven by latitude; *(Revised 2026-10-27: user directed hex tiles — six connecting sides for territory and true circles for every radius in the game. Storage stays a flat `Vec` per field; only the neighbor math and distance metric changed.)*
   - Milestone 1 uses 160×80 (12.8k tiles);
   - the target size is 320×160 (51k tiles).
 - **Fixed tick:** 1 tick = 1 sim-year in every era (D24). Speed runs from 1× to 100 years per second.

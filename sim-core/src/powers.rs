@@ -6,7 +6,7 @@
 
 use crate::culture::NO_CULTURE;
 use crate::scripture::{Polarity, Verse};
-use crate::world::{GRID_HEIGHT, GRID_WIDTH, World};
+use crate::world::{GRID_WIDTH, World};
 use crate::worldgen::Biome;
 
 /// The first playable's six powers (design, Powers).
@@ -246,15 +246,8 @@ fn promote(world: &mut World, footprint: &[usize], count: usize) -> Vec<u32> {
 /// Tiles within `radius` of `(cx, cy)`, east-west wrapping, poles clamped.
 pub fn tiles_around(cx: usize, cy: usize, radius: i32) -> Vec<usize> {
     let mut tiles = Vec::new();
-    for dy in -radius..=radius {
-        let y = cy as i32 + dy;
-        if y < 0 || y >= GRID_HEIGHT as i32 {
-            continue;
-        }
-        for dx in -radius..=radius {
-            let x = (cx as i32 + dx).rem_euclid(GRID_WIDTH as i32);
-            tiles.push(y as usize * GRID_WIDTH + x as usize);
-        }
+    for &(x, y) in &crate::hex::disc(cx, cy, radius as u32) {
+        tiles.push(y * GRID_WIDTH + x);
     }
     tiles
 }
@@ -346,12 +339,12 @@ mod tests {
     #[test]
     fn a_footprint_wraps_at_the_eastern_edge() {
         let tiles = tiles_around(0, 40, 1);
-        assert_eq!(tiles.len(), 9);
+        assert_eq!(tiles.len(), 7);
         assert!(tiles.contains(&(40 * GRID_WIDTH + GRID_WIDTH - 1)));
     }
 
     #[test]
     fn footprints_are_clamped_at_the_poles() {
-        assert_eq!(tiles_around(5, 0, 1).len(), 6);
+        assert_eq!(tiles_around(5, 0, 1).len(), 5);
     }
 }

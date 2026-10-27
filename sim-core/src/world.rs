@@ -12,6 +12,7 @@ use crate::belief::{self, Belief};
 use crate::culture::{self, Culture, NO_CULTURE};
 use crate::demography;
 use crate::faith::{self, Faith};
+pub use crate::hex;
 use crate::language;
 use crate::language::Language;
 use crate::names;

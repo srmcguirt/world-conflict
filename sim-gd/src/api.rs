@@ -273,6 +273,41 @@ impl Sim {
         sim_core::traits::PORTRAIT_H as i64
     }
 
+    /// Elevation per tile, in [0, 1], for the isometric renderer's geometry.
+    #[func]
+    fn tile_heights(&self) -> PackedFloat32Array {
+        self.world.elevation.iter().copied().collect()
+    }
+
+    /// Biome id per tile (see `sim_core::world::Biome`), for the terrain
+    /// shader's material variation and water flag.
+    #[func]
+    fn tile_biomes(&self) -> PackedByteArray {
+        self.world
+            .biome
+            .iter()
+            .map(|biome| *biome as u8)
+            .collect::<Vec<u8>>()
+            .into()
+    }
+
+    /// Culture id per tile, or -1 where nobody lives. The renderer derives
+    /// territory rims and the Chosen's gold edge from it.
+    #[func]
+    fn tile_cultures(&self) -> PackedInt32Array {
+        self.world
+            .culture_id
+            .iter()
+            .map(|&id| {
+                if id == sim_core::culture::NO_CULTURE {
+                    -1
+                } else {
+                    i32::from(id)
+                }
+            })
+            .collect()
+    }
+
     /// A people's dress color: their banner warmed by their skin.
     #[func]
     fn culture_dress(&self, id: i64) -> Color {
