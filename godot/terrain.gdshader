@@ -14,6 +14,7 @@ uniform float night = 0.0; // 0 day, 1 night
 uniform vec2 beacon_pos = vec2(0.0); // local mesh space
 uniform float beacon_radius = 476.0; // 14 tiles * 34px
 uniform vec3 beacon_color = vec3(0.851, 0.659, 0.271); // Chosen gold
+uniform sampler2D color_tex; // per-tile overlay color, updated on revision
 
 varying float v_water;
 varying float v_chosen;
@@ -23,17 +24,17 @@ varying float v_hash;
 varying vec2 v_pos;
 
 void vertex() {
-	float flags = UV.x;
+	float flags = COLOR.r; // water=1, chosen=2, water+chosen=3
 	v_water = mod(flags, 2.0);
 	v_chosen = step(2.0, flags);
-	v_ao = mod(UV.y, 100.0) / 100.0; // packed: ao (0.01) + rim (0.1) * 100
-	v_rim = floor(UV.y / 100.0) / 10.0;
-	v_hash = COLOR.a;
+	v_ao = COLOR.g; // height AO
+	v_rim = COLOR.b; // territory rim
+	v_hash = COLOR.a; // procedural hash
 	v_pos = VERTEX.xy;
 }
 
 void fragment() {
-	vec3 col = COLOR.rgb;
+	vec3 col = texture(color_tex, UV).rgb;
 
 	// Light: one direction, everywhere (art bible). Flat tiles face the
 	// camera, so they take a base term and the height gradient's slope
