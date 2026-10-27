@@ -18,6 +18,12 @@ Status: reviewed, decisions D2–D9 recorded, ready to implement TDD.
 | D7 | **Extend `Role`** (Witness, Prophet → + Ruler, Priest, Merchant); ambition drives coups/heresies/secession | Uses the existing budgets and salience eviction; no parallel notable system |
 | D8 | **Defer the family-line panel** to M6b/M7; the sim-side tracking ships in M6a | The design's own mapping omits it from M6 |
 | D9 | **Two new modules**: `settlements.rs` (tiers, claiming, slots, labor, construction) and `society.rs` (polities, strata, meters, governments, protest/riot) | Auto-decided (question unanswered); smaller diff, matches module granularity |
+| D10 | **Map-first UI, no permanent scripture rail.** The map is the game screen; one selection-driven panel floats on click (settlement card / polity panel); clicking nothing shows nothing | User direction 2026-10-27: "we want the game view as clear as possible for awareness" |
+| D11 | **Scripture becomes an event log**: a collapsible bottom strip (key `L`) holding verses *and* kingdom events for the Chosen — tier-ups, protests, riots, government changes, finished buildings. Clicking an entry pans the camera to where it happened | User direction: the log answers "what is going through the minds of my chosen" in one feed |
+| D12 | **Settlement glyphs are Rust pixels, zoom-aware**: full composite glyph (roof/wall by culture style seed, material by biome, towers by tier, faith mark by doctrine) at zoom; a tier-colored pixel at map scale | Keeps the design's one-Image map architecture; 449 settlements at year 2000 can't each hold a fixed glyph |
+| D13 | **Overlay cycle**: `M` walks biome → culture → language → polity → belief | Fixes the M5 gap (language overlay shipped in Rust but was unreachable in-game) and slots polity next to culture |
+| D14 | **Selection**: click with no power selected selects (settlement → card, polity land → panel); the selected glyph takes a gold ring; `Esc` clears; `Tab` cycles settlements | The map could only cast powers; nothing was inspectable |
+| D15 | **Empty states are designed**: before the first settlement the log names the year and where the first town will raise; the polity overlay falls back to culture colors until a polity exists; the selection panel shows a warm empty state | An empty panel that says nothing reads as a broken game |
 
 ## Evidence
 
@@ -162,6 +168,43 @@ building lines (M7/M8), rebellion/revolution/exodus outcomes (M8), conquest and
 federation (M8), the family-line UI panel (M6b/M7), SAVE_VERSION (no save
 system yet).
 
+## UI design (plan-design-review, 2026-10-27)
+
+Wireframes: `docs/designs/m6a-wireframes.html` (v2, map-first). Visual direction
+stays Kinetic Sand Glyphs — umber/black base, antique gold for the Chosen, glyph
+rings (project learning `world-conflict-visual-direction`).
+
+**Screen model.** The map is the whole window. A 1-line HUD (year, speed,
+overlay, peoples, power) sits on top; the event log is a collapsible bottom
+strip; exactly one floating panel answers "what is this?" when something is
+clicked. No permanent rails. Camera: drag to pan, wheel to zoom, arrows/WASD to
+move — isomorphic with awareness, per the user's direction.
+
+**What each surface shows.**
+
+| Surface | Contents |
+|---|---|
+| Settlement card | tier, slot ring colored by line (damaged slots hatched — riot history stays visible), current build + progress, labor, the strata bar with inline legend |
+| Polity panel | the 6 meters as bars with numbers, unrest thresholds printed under them ("protest at 0.5 · riot at 0.65"), government, capital, settlement count, legitimacy source named |
+| Event log | one chronological feed: verses (the Chosen's inner life) + kingdom events; a gold pip on the collapsed strip when something new arrives; entries click to focus the camera |
+
+**Design dimension ratings** (0–10, and what a 10 needs):
+
+| Dimension | Now | A 10 needs |
+|---|---|---|
+| Information architecture | 7/10 | one selection panel, log collapsible — shipped in this plan |
+| Empty states | 3/10 → 9 | D15's designed empties (log names where the first town raises; polity overlay falls back to culture colors) |
+| Interaction states | 4/10 → 9 | D14 selection + ring + Esc + Tab; power casting unchanged |
+| Visual craft | 5/10 → 8 | D12 zoom-aware glyphs; remaining gap is final pixel craft, settled during implementation with screenshots |
+| Event feedback | 6/10 → 9 | protest lands as a verse (already), riot damage shows as a hatched slot, both appear in the log |
+| Accessibility | 5/10 → 8 | polity tints carry a border difference, not color alone; meters print numbers; keyboard selection via Tab |
+| AI-slop risk | 7/10 | a game HUD in the project's own palette, not a dashboard template |
+| Zoom/responsive | 4/10 → 8 | D12's zoom-aware rendering; glyph legibility re-checked at 1x and 4x in the milestone screenshot |
+
+**Accessibility floor (non-negotiable in M6a):** no information carried by color
+alone (polity tints get a border treatment, meters print numbers), keyboard
+selection, and the log readable at its collapsed one-line height.
+
 ## GSTACK REVIEW REPORT
 
 ```
@@ -183,4 +226,35 @@ CONCERNS:
 RECOMMENDATION: implement M6a TDD in this order: (1) claimed catchments + tier
   ladder, (2) buildings catalog + labor + construction, (3) polities +
   territory, (4) strata + meters + governments, (5) protest/riot. Then M6b.
+```
+
+---
+
+## GSTACK DESIGN REVIEW REPORT
+
+```
+STATUS: DONE_WITH_CONCERNS
+REASON: The M6a plan had no UI design at all; it now does (D10-D15), calibrated
+  to the Kinetic Sand Glyphs direction and the user's map-first direction.
+  Mockups: HTML wireframes v2 at docs/designs/m6a-wireframes.html (the gstack
+  designer binary was unavailable - no OPENAI_API_KEY - so the documented HTML
+  wireframe fallback was used).
+ATTEMPTED: pre-review audit (git log, AGENTS.md, GAME_DESIGN.md UI contracts,
+  main.gd surface), UI scope detection, wireframe generation, 8 dimension
+  ratings, decisions D1-D5 (D1 and D5 redirected the UI model), plan update.
+CONCERNS:
+  1. The M5 language overlay was unreachable in-game (main.gd cycles 4 of
+     Rust's 5 modes). Fixed in the plan by D13, but it should be verified in
+     the M6a implementation - the M overlay index mapping must include both
+     language and polity.
+  2. The scripture panel's current verses[0] freshness check assumes a static
+     verse list. As an event log it needs a revision/append model; the exact
+     Godot-side data flow (Sim.events() drain vs scripture_text polling) is an
+     implementation decision to make when the log is built.
+  3. Settlement glyph pixel craft (roof/wall silhouettes, faith marks) is
+     specified but not drawn. It needs screenshot-driven iteration during
+     implementation, the way M4's portraits did.
+RECOMMENDATION: implement M6a sim-first (per the eng report's TDD order), then
+  the UI in this order: overlay cycle + selection (D13/D14), settlement glyphs
+  (D12), the two panels (D10), the event log (D11). Screenshot each stage.
 ```

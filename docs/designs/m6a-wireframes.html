@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>M6a UI wireframes — Kingdoms (v2: map-first)</title>
+<style>
+  :root {
+    --ink: #121110; --umber: #2A1F17; --ochre: #B9853F; --gold: #D9A845;
+    --text: #EDE6DA; --muted: #A89A86; --panel: #1D1712; --line: #3A2C20;
+  }
+  body { background: var(--ink); color: var(--text); font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; margin: 0; padding: 20px; }
+  h1 { font-size: 15px; color: var(--gold); margin: 0 0 4px; }
+  h2 { font-size: 12px; color: var(--ochre); margin: 0 0 14px; font-weight: normal; }
+  .row { display: flex; gap: 24px; align-items: flex-start; }
+  .frame { border: 1px solid var(--line); background: var(--panel); }
+  .cap { color: var(--muted); font-size: 11px; margin-top: 6px; max-width: 620px; }
+
+  /* === shared: map-first screen === */
+  .screen { width: 760px; height: 440px; position: relative; display: flex; flex-direction: column; }
+  .hud { padding: 6px 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; display: flex; justify-content: space-between; }
+  .hud b { color: var(--text); font-weight: normal; }
+  .map { flex: 1; position: relative; background:
+    repeating-linear-gradient(0deg, #14120F 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, #14120F 0 1px, transparent 1px 8px), #1A1712; }
+  .tint { position: absolute; background: rgba(185, 133, 63, .13); border: 1px solid rgba(217, 168, 69, .55); }
+  .glyph { position: absolute; transform: translate(-50%, -50%); text-align: center; color: var(--gold); font-size: 13px; line-height: 1; }
+  .glyph i { display: block; font-style: normal; color: var(--muted); font-size: 9px; }
+  .glyph.sel { color: #FFF; outline: 1px solid var(--gold); outline-offset: 3px; }
+  .hint { position: absolute; left: 8px; bottom: 6px; color: #6B5F50; font-size: 10px; }
+
+  /* selection card, floating over map */
+  .float { position: absolute; background: rgba(18, 17, 16, .96); border: 1px solid var(--line); padding: 10px 12px; width: 220px; }
+  .float h3 { margin: 0 0 2px; font-size: 12px; color: var(--gold); font-weight: normal; }
+  .float .sub { color: var(--muted); font-size: 10px; margin-bottom: 8px; }
+  .float .x { position: absolute; top: 6px; right: 8px; color: var(--muted); font-size: 11px; }
+
+  /* bottom log strip */
+  .log { border-top: 1px solid var(--line); background: rgba(18, 17, 16, .92); }
+  .logbar { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 10px; color: var(--muted); }
+  .logbar .pip { width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
+  .logbar .chev { margin-left: auto; }
+  .logbody { border-top: 1px solid var(--line); padding: 8px 10px; max-height: 150px; overflow: hidden; }
+  .entry { font-size: 11px; margin-bottom: 6px; display: flex; gap: 8px; cursor: pointer; }
+  .entry .yr { color: var(--ochre); flex: 0 0 42px; }
+  .entry .ev { color: var(--muted); flex: 0 0 74px; }
+  .entry .tx { color: var(--text); }
+  .entry:hover .tx { color: var(--gold); }
+
+  /* settlement card contents */
+  .slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-bottom: 8px; }
+  .slot { height: 12px; border: 1px solid var(--line); background: #0E0C0A; }
+  .slot.food { background: #4A5A2E; border-color: #5F7339; }
+  .slot.def { background: #3A3F4A; border-color: #4C5460; }
+  .slot.faith { background: #6B5420; border-color: #8A6C2C; }
+  .slot.rule { background: #5A2E2E; border-color: #734139; }
+  .slot.trade { background: #2E4A52; border-color: #3A6068; }
+  .slot.dmg { background: repeating-linear-gradient(45deg, #0E0C0A 0 3px, #3A2C20 3px 6px); }
+  .strata { display: flex; height: 10px; border: 1px solid var(--line); }
+  .strata i { display: block; height: 100%; }
+  .legend { display: flex; gap: 8px; font-size: 9px; color: var(--muted); margin-top: 3px; }
+  .legend i { display: inline-block; width: 7px; height: 7px; margin-right: 2px; vertical-align: -1px; }
+
+  /* polity panel contents */
+  .meter { margin-bottom: 5px; }
+  .meter .lab { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+  .meter .lab b { color: var(--text); font-weight: normal; }
+  .bar { height: 4px; background: #0E0C0A; border: 1px solid var(--line); margin-top: 2px; }
+  .bar i { display: block; height: 100%; background: var(--ochre); }
+  .bar.warn i { background: var(--gold); }
+  .gov { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 10px; color: var(--muted); }
+  .gov b { color: var(--text); font-weight: normal; }
+</style>
+</head>
+<body>
+<h1>M6a UI wireframes v2 — map-first, no permanent rail</h1>
+<h2>Per D1/D5: the map is the game. One selection panel floats on click. Scripture is a collapsible bottom log of the Chosen's inner life; entries click to focus the camera.</h2>
+
+<div class="row">
+  <!-- 1. observe mode: clear map + collapsed log -->
+  <div>
+    <div class="frame screen">
+      <div class="hud"><span>year <b>1240</b> · running · 25 years/s · <b>polity</b></span><span>peoples <b>7</b> · power <b>none</b> · <b>M</b> overlays · <b>L</b> log</span></div>
+      <div class="map">
+        <div class="tint" style="left:16%;top:20%;width:48%;height:46%"></div>
+        <div class="tint" style="left:62%;top:54%;width:20%;height:24%;border-color:rgba(185,133,63,.4)"></div>
+        <div class="glyph" style="left:29%;top:33%">⌂<i>town · 2</i></div>
+        <div class="glyph" style="left:43%;top:43%">⌂<i>village · 1</i></div>
+        <div class="glyph" style="left:51%;top:27%">⌂<i>village · 1</i></div>
+        <div class="glyph" style="left:37%;top:55%">⌂<i>camp · 0</i></div>
+        <div class="glyph" style="left:68%;top:63%">⌂<i>camp · 0</i></div>
+        <div class="hint">drag to pan · wheel to zoom · click to inspect · arrows/WASD move</div>
+      </div>
+      <div class="log">
+        <div class="logbar"><span class="pip"></span><span>year 1241 · the Kouvriamo raised a palisade at Vouchiak</span><span class="chev">▴ expand (L)</span></div>
+      </div>
+    </div>
+    <div class="cap">Observe mode. The map is the whole screen; the log is one line with a pip when something new arrives. Nothing else competes for awareness.</div>
+  </div>
+
+  <!-- 2. settlement selected -->
+  <div>
+    <div class="frame screen">
+      <div class="hud"><span>year <b>1240</b> · running · 25 years/s · <b>polity</b></span><span>peoples <b>7</b> · power <b>none</b></span></div>
+      <div class="map">
+        <div class="tint" style="left:16%;top:20%;width:48%;height:46%"></div>
+        <div class="glyph sel" style="left:29%;top:33%">⌂</div>
+        <div class="glyph" style="left:43%;top:43%">⌂</div>
+        <div class="glyph" style="left:51%;top:27%">⌂</div>
+        <div class="glyph" style="left:37%;top:55%">⌂</div>
+        <div class="float" style="left:33%;top:26%">
+          <span class="x">✕</span>
+          <h3>Vouchiak · town</h3>
+          <div class="sub">tier 2 · 6 slots · 480 people · the Kouvriamo</div>
+          <div class="slots">
+            <div class="slot food"></div><div class="slot food"></div><div class="slot def"></div>
+            <div class="slot faith"></div><div class="slot rule"></div><div class="slot trade dmg"></div>
+          </div>
+          <div class="sub" style="margin-bottom:6px">building <b style="color:var(--text)">stone walls</b> · 34% · labor 12.4/yr<br>barter ground damaged in the year-1238 riot</div>
+          <div class="strata"><i style="width:58%;background:#4A5A2E"></i><i style="width:22%;background:#B9853F"></i><i style="width:12%;background:#8A6C2C"></i><i style="width:8%;background:#734139"></i></div>
+          <div class="legend"><span><i style="background:#4A5A2E"></i>commoners 58</span><span><i style="background:#B9853F"></i>craft 22</span><span><i style="background:#8A6C2C"></i>priests 12</span><span><i style="background:#734139"></i>rulers 8</span></div>
+        </div>
+      </div>
+      <div class="log"><div class="logbar"><span class="pip"></span><span>year 1241 · the Kouvriamo raised a palisade at Vouchiak</span><span class="chev">▴ expand (L)</span></div></div>
+    </div>
+    <div class="cap">Click a settlement: gold ring on the glyph, one card floats beside it. The riot's damage is still visible as a hatched slot — history lives in the world, not just the log.</div>
+  </div>
+
+  <!-- 3. polity panel + expanded log -->
+  <div>
+    <div class="frame screen">
+      <div class="hud"><span>year <b>1240</b> · running · 25 years/s · <b>polity</b></span><span>peoples <b>7</b> · power <b>none</b></span></div>
+      <div class="map">
+        <div class="tint" style="left:16%;top:20%;width:48%;height:46%"></div>
+        <div class="float" style="left:6%;top:14%;width:230px">
+          <span class="x">✕</span>
+          <h3>the Kouvriamo realm</h3>
+          <div class="sub">monarchy · capital Vouchiak (town) · 5 settlements</div>
+          <div class="meter"><div class="lab"><span>prosperity</span><b>0.62</b></div><div class="bar"><i style="width:62%"></i></div></div>
+          <div class="meter"><div class="lab"><span>inequality</span><b>0.41</b></div><div class="bar"><i style="width:41%"></i></div></div>
+          <div class="meter"><div class="lab"><span>legitimacy</span><b>0.58</b></div><div class="bar"><i style="width:58%"></i></div></div>
+          <div class="meter"><div class="lab"><span>piety</span><b>0.31</b></div><div class="bar"><i style="width:31%"></i></div></div>
+          <div class="meter"><div class="lab"><span>liberty</span><b>0.22</b></div><div class="bar"><i style="width:22%"></i></div></div>
+          <div class="meter"><div class="lab"><span>cohesion</span><b>0.74</b></div><div class="bar"><i style="width:74%"></i></div></div>
+          <div class="meter"><div class="lab"><span>unrest</span><b>0.51</b></div><div class="bar warn"><i style="width:51%"></i></div></div>
+          <div class="gov">protest at <b>0.5</b> · riot at <b>0.65</b><br>legitimacy source: dynasty renown</div>
+        </div>
+      </div>
+      <div class="log">
+        <div class="logbar"><span class="pip"></span><span>year 1241 · the Kouvriamo raised a palisade at Vouchiak</span><span class="chev">▾ collapse (L)</span></div>
+        <div class="logbody">
+          <div class="entry"><span class="yr">1241</span><span class="ev">building</span><span class="tx">the Kouvriamo raised a palisade at Vouchiak</span></div>
+          <div class="entry"><span class="yr">1238</span><span class="ev">riot</span><span class="tx">the market at Vouchiak was burned; two in ten of the quarter are gone</span></div>
+          <div class="entry"><span class="yr">1231</span><span class="ev">protest</span><span class="tx">In year 1231 the elders gathered at Vouchiak and would not pay the tribute.</span></div>
+          <div class="entry"><span class="yr">1226</span><span class="ev">kingdom</span><span class="tx">the Kouvriamo raised a hall at Vouchiak and named a king</span></div>
+          <div class="entry"><span class="yr">1219</span><span class="ev">verse</span><span class="tx">Vrosou Lozou Vouchiak the first people Bueme — In the beginning the Watcher set the first people at Vouchiak…</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">Click empty polity land: the realm panel. Log expanded: one chronological feed mixing verses (the Chosen's inner life) with kingdom events. Every entry is clickable and pans the camera to where it happened.</div>
+  </div>
+</div>
+</body>
+</html>
