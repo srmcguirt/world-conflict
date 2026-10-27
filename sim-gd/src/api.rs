@@ -93,6 +93,12 @@ impl Sim {
     fn revision(&self) -> i64 {
         self.world.revision() as i64
     }
+
+    /// How many peoples exist, for the HUD.
+    #[func]
+    fn culture_count(&self) -> i64 {
+        self.world.cultures().len() as i64
+    }
 }
 
 impl Sim {

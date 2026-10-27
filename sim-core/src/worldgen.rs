@@ -130,6 +130,28 @@ pub fn generate(seed: u64) -> GeneratedWorld {
     world
 }
 
+/// Whether people can settle this biome.
+///
+/// Mountains and deserts stay empty on purpose: "empty mountains and deserts
+/// separate peoples" (design, Membership), and that separation is what makes
+/// peoples split along terrain.
+pub fn settleable(biome: Biome) -> bool {
+    matches!(biome, Biome::Grassland | Biome::Forest | Biome::Beach)
+}
+
+/// Flat RGB for a biome, shared by the biome and culture overlays.
+pub fn biome_color(biome: Biome) -> [u8; 3] {
+    match biome {
+        Biome::Ocean => [26, 62, 110],
+        Biome::Beach => [214, 197, 148],
+        Biome::Grassland => [124, 148, 84],
+        Biome::Forest => [58, 102, 60],
+        Biome::Desert => [206, 174, 110],
+        Biome::Mountain => [138, 134, 126],
+        Biome::Ice => [232, 240, 246],
+    }
+}
+
 /// RGBA bytes for the biome overlay, one 4-byte pixel per tile.
 ///
 /// Flat biome colors for Milestone 1; the hillshaded relief of the Kinetic
@@ -137,15 +159,7 @@ pub fn generate(seed: u64) -> GeneratedWorld {
 pub fn overlay_biome(biomes: &[Biome]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(biomes.len() * 4);
     for &biome in biomes {
-        let (r, g, b) = match biome {
-            Biome::Ocean => (26, 62, 110),
-            Biome::Beach => (214, 197, 148),
-            Biome::Grassland => (124, 148, 84),
-            Biome::Forest => (58, 102, 60),
-            Biome::Desert => (206, 174, 110),
-            Biome::Mountain => (138, 134, 126),
-            Biome::Ice => (232, 240, 246),
-        };
+        let [r, g, b] = biome_color(biome);
         bytes.extend_from_slice(&[r, g, b, 255]);
     }
     bytes

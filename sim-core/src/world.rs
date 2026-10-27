@@ -5,6 +5,11 @@
 //! War (design, Architecture). Each system is a single `tick(world, rng)`
 //! function so it can be tested on its own.
 
+use rand::SeedableRng;
+use rand_pcg::Pcg64;
+
+use crate::culture::{self, Culture, NO_CULTURE};
+use crate::demography;
 use crate::worldgen::{self, Biome, GeneratedWorld};
 
 /// Milestone 1 grid: an equirectangular tile map that wraps east to west.
@@ -67,10 +72,26 @@ pub struct World {
     pub biome: Vec<Biome>,
     /// People the tile can carry, corrected for latitude.
     pub carrying_capacity: Vec<f32>,
+    /// People living on the tile. A tile below 1 person carries no culture.
+    pub population: Vec<f32>,
+    /// Culture per tile, [`NO_CULTURE`] where nobody lives.
+    pub culture_id: Vec<u16>,
+    /// Flat per-tile culture vectors, `culture::DIMS` per tile.
+    pub culture_vec: Vec<f32>,
+    /// Every people that exists, indexed by id.
+    pub(crate) cultures: Vec<Culture>,
+    /// Split hysteresis: consecutive checks each culture had a qualifying
+    /// candidate. A people that keeps producing candidates splits.
+    pub(crate) split_watch: Vec<u8>,
+    /// Tile humanity started on (design, Eden).
+    pub(crate) eden: Option<u32>,
+    /// Demography's own RNG stream, derived from the world seed (design:
+    /// every system gets its own seeded RNG).
+    pub(crate) rng: Pcg64,
 }
 
 impl World {
-    /// Generates a new world from `seed`.
+    /// Generates a new world from `seed`, then plants Eden.
     pub fn new(seed: u64) -> Self {
         let GeneratedWorld {
             elevation,
@@ -80,7 +101,8 @@ impl World {
             carrying_capacity,
         } = worldgen::generate(seed);
 
-        Self {
+        let tiles = GRID_WIDTH * GRID_HEIGHT;
+        let mut world = Self {
             seed,
             tick: 0,
             revision: 1,
@@ -89,7 +111,16 @@ impl World {
             temperature,
             biome,
             carrying_capacity,
-        }
+            population: vec![0.0; tiles],
+            culture_id: vec![NO_CULTURE; tiles],
+            culture_vec: vec![0.0; tiles * culture::DIMS],
+            cultures: Vec::new(),
+            split_watch: Vec::new(),
+            eden: None,
+            rng: Pcg64::seed_from_u64(seed ^ 0xD3A0_6D3D_0000_0001),
+        };
+        demography::plant_eden(&mut world);
+        world
     }
 
     /// The world seed this history came from.
@@ -107,17 +138,55 @@ impl World {
         self.revision
     }
 
+    /// Every people that exists, indexed by id.
+    pub fn cultures(&self) -> &[Culture] {
+        &self.cultures
+    }
+
+    /// Culture id of the people humanity started as.
+    pub fn eden_culture_id(&self) -> u16 {
+        match self.eden {
+            Some(tile) => self.culture_id[tile as usize],
+            None => NO_CULTURE,
+        }
+    }
+
+    /// The tile Eden was planted on.
+    pub fn eden_tile(&self) -> Option<usize> {
+        self.eden.map(|tile| tile as usize)
+    }
+
+    /// Copy of one tile's culture vector.
+    pub fn culture_vec_of(&self, tile: usize) -> [f32; culture::DIMS] {
+        let mut out = [0.0; culture::DIMS];
+        let start = tile * culture::DIMS;
+        out.copy_from_slice(&self.culture_vec[start..start + culture::DIMS]);
+        out
+    }
+
     /// RGBA bytes for the map image, one 4-byte pixel per tile.
     pub fn paint_overlay(&self, mode: Overlay) -> Vec<u8> {
         match mode {
             Overlay::Biome => worldgen::overlay_biome(&self.biome),
-            // Cultures, traits, belief, polities and languages arrive in
-            // Milestones 1-5; until then every mode paints the biome overlay.
-            Overlay::Culture
-            | Overlay::Traits
-            | Overlay::Belief
-            | Overlay::Polity
-            | Overlay::Language => worldgen::overlay_biome(&self.biome),
+            // Settled tiles take their culture's color, everything else stays a
+            // desaturated biome shade (design, Map states).
+            Overlay::Culture => {
+                let mut bytes = Vec::with_capacity(self.biome.len() * 4);
+                for i in 0..self.biome.len() {
+                    let [r, g, b] = if self.culture_id[i] == NO_CULTURE {
+                        culture::unsettled_color(self.biome[i])
+                    } else {
+                        culture::color(self.culture_id[i])
+                    };
+                    bytes.extend_from_slice(&[r, g, b, 255]);
+                }
+                bytes
+            }
+            // Traits, belief, polities and languages arrive in Milestones 4-5;
+            // until then every mode paints the biome overlay.
+            Overlay::Traits | Overlay::Belief | Overlay::Polity | Overlay::Language => {
+                worldgen::overlay_biome(&self.biome)
+            }
         }
     }
 
@@ -140,7 +209,20 @@ impl World {
     fn tick_systems(&mut self) {
         // Climate (rare) -> Population -> Migration -> Drift/Blend -> Traits
         //   -> Belief -> Polity -> Tech -> War
-        // Every 10 ticks: culture aggregates. Every 25 ticks: split + schism checks.
+        demography::tick_population(self);
+        demography::tick_migration(self);
+        demography::tick_drift(self);
+        demography::sync_membership(self);
+
+        // Aggregates refresh every 10 ticks; splits and schisms check every 25
+        // (design, Simulation contracts).
+        if self.tick.is_multiple_of(10) {
+            culture::refresh_aggregates(self);
+        }
+        if self.tick.is_multiple_of(25) {
+            culture::tick_splits(self);
+            culture::refresh_aggregates(self);
+        }
     }
 }
 

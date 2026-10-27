@@ -1,0 +1,381 @@
+//! Cultures as discrete entities: identity, favor, terrain costs, split
+//! components and the culture overlay (design, Simulation contracts ->
+//! Cultures are discrete entities).
+//!
+//! A culture is a small population-weighted vector drifting through its
+//! region's biome target; tiles drift and blend, and a component that drifts
+//! far enough from its parent's centroid becomes a daughter people.
+
+use crate::world::{GRID_HEIGHT, GRID_WIDTH, World};
+use crate::worldgen::{Biome, latitude_area_factor};
+
+/// Culture-vector dimensions: the 5-value profile of the design's culture
+/// weight (martial, devout, mercantile, scholarly, communal).
+pub const DIMS: usize = 5;
+
+/// Axis indices for [`Culture::centroid`] and per-tile vectors.
+pub const MARTIAL: usize = 0;
+pub const DEVOUT: usize = 1;
+pub const MERCANTILE: usize = 2;
+pub const SCHOLARLY: usize = 3;
+pub const COMMUNAL: usize = 4;
+
+/// Sentinel in `World::culture_id` for a tile nobody lives on (design: only
+/// tiles with a population of at least 1 carry a culture).
+pub const NO_CULTURE: u16 = u16::MAX;
+
+/// Which people the god favors. Exactly one culture is `Chosen` at any time.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Favor {
+    Chosen,
+    Other,
+}
+
+/// A settled distance between two culture vectors (Euclidean over [`DIMS`]).
+pub fn distance(a: &[f32; DIMS], b: &[f32; DIMS]) -> f32 {
+    let mut sum = 0.0;
+    for k in 0..DIMS {
+        let d = a[k] - b[k];
+        sum += d * d;
+    }
+    libm::sqrtf(sum)
+}
+
+/// One discrete people (design, Cultures are discrete entities).
+///
+/// `id` is the index in `World::cultures`; `centroid` is the population-weighted
+/// mean of its member tiles, refreshed every 10 ticks.
+#[derive(Clone, Debug)]
+pub struct Culture {
+    pub id: u16,
+    pub parent_id: Option<u16>,
+    pub founded_tick: u64,
+    /// Seeded at founding; names are generated from it from Milestone 2.
+    pub name_seed: u64,
+    pub centroid: [f32; DIMS],
+    pub favor: Favor,
+    /// Cached aggregates, refreshed every 10 ticks (design: aggregates).
+    pub population: f32,
+    pub tiles: u32,
+}
+
+/// Cost of one migration step into `biome` at `lat_deg`.
+///
+/// `east_west` multiplies by cos(lat): an east-west step near the poles covers
+/// less real distance because tiles narrow there (design R2-10). North-south
+/// cost is unchanged. Impassable biomes are infinite.
+pub fn step_cost(biome: Biome, lat_deg: f32, east_west: bool) -> f32 {
+    let base = match biome {
+        Biome::Ocean | Biome::Ice => return f32::INFINITY,
+        Biome::Grassland => 1.0,
+        Biome::Beach => 1.2,
+        Biome::Forest => 1.5,
+        Biome::Desert => 2.5,
+        Biome::Mountain => 3.5,
+    };
+    if east_west {
+        base * latitude_area_factor(lat_deg)
+    } else {
+        base
+    }
+}
+
+/// The culture vector a region's people drift toward.
+///
+/// Deserts breed hard, mobile peoples; forests breed devout scholars; coasts
+/// breed merchants; grasslands breed communal herders. This is the seed of the
+/// visible divergence the Milestone 1 gate checks.
+pub fn biome_target(biome: Biome) -> [f32; DIMS] {
+    match biome {
+        Biome::Grassland => [0.35, 0.35, 0.45, 0.35, 0.70],
+        Biome::Forest => [0.30, 0.75, 0.30, 0.65, 0.45],
+        Biome::Beach => [0.45, 0.35, 0.85, 0.50, 0.45],
+        Biome::Desert => [0.80, 0.40, 0.65, 0.30, 0.35],
+        Biome::Mountain => [0.70, 0.55, 0.25, 0.40, 0.60],
+        Biome::Ocean | Biome::Ice => [0.5; DIMS],
+    }
+}
+
+/// The 8 neighbors of a tile, east-west wrapping (design, Grid).
+pub fn neighbors(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
+    let mut out = [(0, 0); 8];
+    let mut n = 0;
+    for dy in -1i32..=1 {
+        for dx in -1i32..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let ny = y as i32 + dy;
+            if ny < 0 || ny >= GRID_HEIGHT as i32 {
+                continue;
+            }
+            let nx = (x as i32 + dx).rem_euclid(GRID_WIDTH as i32);
+            out[n] = (nx as usize, ny as usize);
+            n += 1;
+        }
+    }
+    out.into_iter().take(n)
+}
+
+/// Connected components of `culture_id`'s settled tiles, 8-neighbor.
+///
+/// Components are computed over *member* tiles only, so empty mountains,
+/// deserts and oceans separate peoples (design, Membership). Ordering is
+/// deterministic: tiles ascending, components by their smallest tile.
+pub fn components(world: &World, culture_id: u16) -> Vec<Vec<usize>> {
+    let tiles = GRID_WIDTH * GRID_HEIGHT;
+    let mut seen = vec![false; tiles];
+    let mut out = Vec::new();
+
+    for start in 0..tiles {
+        if seen[start] || world.culture_id[start] != culture_id || world.population[start] < 1.0 {
+            continue;
+        }
+        let mut component = Vec::new();
+        let mut stack = vec![start];
+        seen[start] = true;
+        while let Some(i) = stack.pop() {
+            component.push(i);
+            let (x, y) = (i % GRID_WIDTH, i / GRID_WIDTH);
+            for (nx, ny) in neighbors(x, y) {
+                let n = ny * GRID_WIDTH + nx;
+                if !seen[n] && world.culture_id[n] == culture_id && world.population[n] >= 1.0 {
+                    seen[n] = true;
+                    stack.push(n);
+                }
+            }
+        }
+        component.sort_unstable();
+        out.push(component);
+    }
+    out
+}
+
+/// Population-weighted mean culture vector over `tiles`.
+pub fn weighted_mean(world: &World, tiles: &[usize]) -> [f32; DIMS] {
+    let mut sum = [0.0; DIMS];
+    let mut weight = 0.0;
+    for &i in tiles {
+        let pop = world.population[i].max(0.0);
+        weight += pop;
+        for (k, slot) in sum.iter_mut().enumerate() {
+            *slot += world.culture_vec[i * DIMS + k] * pop;
+        }
+    }
+    if weight <= 0.0 {
+        return [0.0; DIMS];
+    }
+    for slot in &mut sum {
+        *slot /= weight;
+    }
+    sum
+}
+
+/// A component must cover at least this many tiles to become a daughter.
+pub const SPLIT_MIN_TILES: usize = 30;
+
+/// A component must hold at least this share of the parent's people.
+pub const SPLIT_MIN_SHARE: f32 = 0.05;
+
+/// A component must sit at least this far from the parent centroid.
+pub const SPLIT_MIN_DISTANCE: f32 = 0.25;
+
+/// A candidate must pass this many consecutive checks (hysteresis).
+pub const SPLIT_PASSES: u8 = 2;
+
+/// Refreshes each culture's cached aggregates and population-weighted centroid.
+pub fn refresh_aggregates(world: &mut World) {
+    let mut members = vec![Vec::new(); world.cultures.len()];
+    for i in 0..world.population.len() {
+        let id = world.culture_id[i];
+        if id != NO_CULTURE && world.population[i] >= 1.0 {
+            members[id as usize].push(i);
+        }
+    }
+    for (culture, tiles) in world.cultures.iter_mut().zip(members.iter()) {
+        culture.tiles = tiles.len() as u32;
+    }
+    let refreshed: Vec<(f32, [f32; DIMS])> = members
+        .iter()
+        .map(|tiles| {
+            let population = tiles.iter().map(|&i| world.population[i]).sum();
+            (population, weighted_mean(world, tiles))
+        })
+        .collect();
+    for (culture, (population, centroid)) in world.cultures.iter_mut().zip(refreshed) {
+        culture.population = population;
+        if culture.tiles > 0 {
+            culture.centroid = centroid;
+        }
+    }
+}
+
+/// Checks every culture for a daughter people (design, Split rule).
+///
+/// Runs every 25 ticks. A candidate passing [`SPLIT_PASSES`] checks in a row
+/// splits off as a new culture with the parent's id and a fresh name seed.
+pub fn tick_splits(world: &mut World) {
+    let cultures = world.cultures.len();
+    for cid in 0..cultures {
+        let Some((signature, _)) = split_candidate(world, cid as u16) else {
+            world.split_watch[cid] = 0;
+            continue;
+        };
+        world.split_watch[cid] += 1;
+        if world.split_watch[cid] >= SPLIT_PASSES {
+            world.split_watch[cid] = 0;
+            split_off(world, cid as u16, signature);
+        }
+    }
+}
+
+/// The component of `culture_id` most likely to become a daughter, as
+/// `(smallest tile index, population)`. The parent body (largest component)
+/// never splits off from itself.
+fn split_candidate(world: &World, culture_id: u16) -> Option<(usize, f32)> {
+    let parts = components(world, culture_id);
+    if parts.len() < 2 {
+        return None;
+    }
+    let main = parts
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, part)| part.len())
+        .map(|(i, _)| i)?;
+    let parent_pop = world.cultures[culture_id as usize].population.max(1.0);
+    // The parent centroid is the *body's* mean, not the whole culture's: after a
+    // lobe drifts, a whole-culture mean sits between the two and no lobe ever
+    // looks far enough away to split.
+    let parent_centroid = weighted_mean(world, &parts[main]);
+
+    let mut best: Option<(usize, f32)> = None;
+    let body_tiles = parts[main].len();
+    for (index, part) in parts.iter().enumerate() {
+        // A daughter branches off the body; it never becomes the body.
+        if index == main || part.len() < SPLIT_MIN_TILES || part.len() > body_tiles {
+            continue;
+        }
+        let population: f32 = part.iter().map(|&i| world.population[i]).sum();
+        if population < SPLIT_MIN_SHARE * parent_pop {
+            continue;
+        }
+        if distance(&weighted_mean(world, part), &parent_centroid) < SPLIT_MIN_DISTANCE {
+            continue;
+        }
+        if best.is_none_or(|(_, best_pop)| population > best_pop) {
+            best = Some((part[0], population));
+        }
+    }
+    best
+}
+
+/// Creates the daughter culture from the component starting at `signature`.
+fn split_off(world: &mut World, parent: u16, signature: usize) {
+    let Some(part) = components(world, parent)
+        .into_iter()
+        .find(|part| part.first() == Some(&signature) && part.len() >= SPLIT_MIN_TILES)
+    else {
+        return;
+    };
+
+    let id = world.cultures.len() as u16;
+    let population: f32 = part.iter().map(|&i| world.population[i]).sum();
+    let centroid = weighted_mean(world, &part);
+    let parent_culture = &world.cultures[parent as usize];
+    let parent_seed = parent_culture.name_seed;
+
+    // Fresh, not the 10-tick cache: a split must not hand favor to a rump.
+    let parent_remaining: f32 = (0..world.population.len())
+        .filter(|&i| world.culture_id[i] == parent && world.population[i] >= 1.0)
+        .map(|i| world.population[i])
+        .sum::<f32>()
+        - population;
+
+    // Favor follows the heir's tile from Milestone 3. Until there is a family
+    // line, the parent body keeps Chosen unless the daughter has become the
+    // larger people of the two.
+    let favor = if parent_culture.favor == Favor::Chosen && population > parent_remaining {
+        world.cultures[parent as usize].favor = Favor::Other;
+        Favor::Chosen
+    } else {
+        Favor::Other
+    };
+
+    for &i in &part {
+        world.culture_id[i] = id;
+    }
+    world.cultures.push(Culture {
+        id,
+        parent_id: Some(parent),
+        founded_tick: world.tick(),
+        name_seed: mix(parent_seed ^ world.tick() ^ ((id as u64) << 32)),
+        centroid,
+        favor,
+        population,
+        tiles: part.len() as u32,
+    });
+    world.split_watch.push(0);
+}
+
+fn mix(mut z: u64) -> u64 {
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// A color for a culture's overlay: golden-angle hue steps, so ids stay visibly
+/// distinct (design, Map states).
+pub fn color(id: u16) -> [u8; 3] {
+    let hue = (id as f32 * 0.618_034).fract();
+    hsv_rgb(hue, 0.62, 0.95)
+}
+
+/// Saturation-drained biome color for land nobody lives on (design, Map
+/// states: unsettled land desaturated).
+pub fn unsettled_color(biome: Biome) -> [u8; 3] {
+    let [r, g, b] = crate::worldgen::biome_color(biome);
+    let gray = 0.30 * r as f32 + 0.59 * g as f32 + 0.11 * b as f32;
+    [
+        (r as f32 * 0.25 + gray * 0.75) as u8,
+        (g as f32 * 0.25 + gray * 0.75) as u8,
+        (b as f32 * 0.25 + gray * 0.75) as u8,
+    ]
+}
+
+/// HSV (h in [0, 1)) to RGB, sector math only, no transcendentals.
+fn hsv_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
+    let h6 = h * 6.0;
+    let sector = h6.floor() as i32 % 6;
+    let f = h6 - h6.floor();
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - s * f);
+    let t = v * (1.0 - s * (1.0 - f));
+    let (r, g, b) = match sector {
+        0 => (v, t, p),
+        1 => (q, v, p),
+        2 => (p, v, t),
+        3 => (p, q, v),
+        4 => (t, p, v),
+        _ => (v, p, q),
+    };
+    [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn neighbor_count_shrinks_at_the_poles_but_wraps_east_west() {
+        assert_eq!(neighbors(0, 0).count(), 5);
+        assert_eq!(neighbors(0, 40).count(), 8);
+        assert_eq!(neighbors(GRID_WIDTH - 1, 40).count(), 8, "east edge wraps");
+    }
+
+    #[test]
+    fn culture_colors_are_distinct_for_the_first_few_ids() {
+        assert_ne!(color(0), color(1));
+        assert_ne!(color(1), color(2));
+        assert_ne!(color(0), color(2));
+    }
+}

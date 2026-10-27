@@ -4,10 +4,13 @@
 //!
 //! ```text
 //! cargo run -p sim-core --bin worldsim -- --seed 1 --years 2000 --out run.png
+//! cargo run -p sim-core --bin worldsim -- --overlay culture --trace 250
 //! ```
 //!
-//! Culture split metrics (culture count, tiles per culture, pairwise centroid
-//! distances) arrive with the culture system in Milestone 1.
+//! Tuning metrics: settled tiles and population over time, culture count,
+//! tiles and people per culture, and pairwise centroid distances. They are the
+//! numbers that decide whether migration and drift produce the Milestone 1
+//! "3+ visibly distinct peoples" gate.
 //!
 //! PNG encoding is hand-rolled with uncompressed deflate blocks: a dev-dependency
 //! is not visible to `[[bin]]` targets, and a regular `image` dependency would
@@ -18,13 +21,15 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use sim_core::World;
+use sim_core::culture;
 use sim_core::world::{GRID_HEIGHT, GRID_WIDTH, Overlay};
 use sim_core::worldgen::Biome;
 
 fn main() -> ExitCode {
     let mut seed = 1_u64;
     let mut years = 0_u32;
-    let mut out = "run.png".to_string();
+    let mut trace = 0_u32;
+    let mut out = None::<String>;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -32,7 +37,8 @@ fn main() -> ExitCode {
         match arg.as_str() {
             "--seed" => seed = value().and_then(|v| v.parse().ok()).unwrap_or(seed),
             "--years" => years = value().and_then(|v| v.parse().ok()).unwrap_or(years),
-            "--out" => out = value().unwrap_or(out),
+            "--trace" => trace = value().and_then(|v| v.parse().ok()).unwrap_or(trace),
+            "--out" => out = value(),
             other => {
                 eprintln!("unknown argument: {other}");
                 return ExitCode::FAILURE;
@@ -41,13 +47,67 @@ fn main() -> ExitCode {
     }
 
     let mut world = World::new(seed);
-    world.step(years);
+    if trace > 0 {
+        println!(
+            "{:>6}  {:>7}  {:>9}  {:>8}  {:>4}",
+            "year", "settled", "people", "largest", "cultures"
+        );
+        while world.tick() < years as u64 {
+            let chunk = trace.min(years - world.tick() as u32);
+            world.step(chunk);
+            print_progress(&world);
+        }
+    } else {
+        world.step(years);
+    }
 
+    print_biomes(&world);
+    print_cultures(&world);
+
+    if let Some(out) = out {
+        let mode = Overlay::Culture;
+        let rgba = world.paint_overlay(mode);
+        if let Err(err) = write_png(
+            Path::new(&out),
+            GRID_WIDTH as u32,
+            GRID_HEIGHT as u32,
+            &rgba,
+        ) {
+            eprintln!("failed to write {out}: {err}");
+            return ExitCode::FAILURE;
+        }
+        println!("wrote {out}");
+    }
+    ExitCode::SUCCESS
+}
+
+fn settled(world: &World) -> usize {
+    world.population.iter().filter(|&&p| p >= 1.0).count()
+}
+
+fn people(world: &World) -> f32 {
+    world.population.iter().sum()
+}
+
+fn print_progress(world: &World) {
+    let largest = world.cultures().iter().map(|c| c.tiles).max().unwrap_or(0);
+    println!(
+        "{:>6}  {:>7}  {:>9.0}  {:>8}  {:>4}",
+        world.tick(),
+        settled(world),
+        people(world),
+        largest,
+        world.cultures().len()
+    );
+}
+
+fn print_biomes(world: &World) {
     let tiles = world.biome.len() as f32;
     let land = world.biome.iter().filter(|b| **b != Biome::Ocean).count();
     let capacity: f32 = world.carrying_capacity.iter().sum();
     println!(
-        "seed {seed}, year {}: land {:.1}%, capacity {:.0}",
+        "seed {}, year {}: land {:.1}%, capacity {:.0}",
+        world.seed(),
         world.tick(),
         100.0 * land as f32 / tiles,
         capacity
@@ -67,19 +127,69 @@ fn main() -> ExitCode {
             100.0 * count as f32 / tiles
         );
     }
+}
 
-    let rgba = world.paint_overlay(Overlay::Biome);
-    if let Err(err) = write_png(
-        Path::new(&out),
-        GRID_WIDTH as u32,
-        GRID_HEIGHT as u32,
-        &rgba,
-    ) {
-        eprintln!("failed to write {out}: {err}");
-        return ExitCode::FAILURE;
+fn print_cultures(world: &World) {
+    let orphans: Vec<usize> = (0..world.population.len())
+        .filter(|&i| {
+            world.population[i] >= 1.0 && world.culture_id[i] == sim_core::culture::NO_CULTURE
+        })
+        .collect();
+    if !orphans.is_empty() {
+        println!("orphaned settlements: {} e.g. {orphans:?}", orphans.len());
+        for &i in orphans.iter().take(5) {
+            let (x, y) = (i % GRID_WIDTH, i / GRID_WIDTH);
+            println!(
+                "  tile {i} ({x},{y}) pop {:.2} biome {:?}",
+                world.population[i], world.biome[i]
+            );
+        }
     }
-    println!("wrote {out}");
-    ExitCode::SUCCESS
+    let cultures = world.cultures();
+    println!("cultures: {}", cultures.len());
+    for culture in cultures {
+        println!(
+            "  #{} parent {:?} {:?} tiles {:>4} people {:>7.0}",
+            culture.id, culture.parent_id, culture.favor, culture.tiles, culture.population
+        );
+        let parts = culture::components(world, culture.id);
+        let sizes: Vec<usize> = parts.iter().map(|part| part.len()).collect();
+        let mut furthest = 0.0_f32;
+        for part in &parts {
+            let mean = culture::weighted_mean(world, part);
+            furthest = furthest.max(culture::distance(&mean, &culture.centroid));
+        }
+        println!("     components {sizes:?}, furthest {furthest:.3} from centroid");
+
+        if let Some(main) = parts.iter().max_by_key(|part| part.len()) {
+            let body = culture::weighted_mean(world, main);
+            let mut report: Vec<(f32, usize)> = parts
+                .iter()
+                .filter(|part| part.len() >= 30)
+                .map(|part| {
+                    (
+                        culture::distance(&culture::weighted_mean(world, part), &body),
+                        part.len(),
+                    )
+                })
+                .collect();
+            report.sort_by(|a, b| b.0.total_cmp(&a.0));
+            let top: Vec<String> = report
+                .iter()
+                .take(4)
+                .map(|(d, n)| format!("{n} tiles @ {d:.3}"))
+                .collect();
+            println!("     vs body: {}", top.join(", "));
+        }
+    }
+    for (i, a) in cultures.iter().enumerate() {
+        for b in &cultures[i + 1..] {
+            let d = culture::distance(&a.centroid, &b.centroid);
+            if d > 0.0 {
+                println!("  centroid distance #{} <-> #{}: {d:.3}", a.id, b.id);
+            }
+        }
+    }
 }
 
 /// Writes an 8-bit RGBA PNG using zlib "stored" (uncompressed) deflate blocks.

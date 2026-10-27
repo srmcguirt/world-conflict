@@ -1,8 +1,13 @@
 extends Node
 
-## Milestone 1 shell: generated biome map, speed control, repaint when dirty (R6).
+## Milestone 1 shell: generated map, speed control, repaint when dirty (R6).
 
 const OVERLAY_BIOME := 0
+const OVERLAY_CULTURE := 1
+## Overlay modes in UI order (design, Rendering). M cycles through the ones
+## that exist; the rest fall back to the biome overlay in Rust until their
+## systems arrive.
+const OVERLAYS := [OVERLAY_BIOME, OVERLAY_CULTURE]
 ## Years per second at each speed step (design: 1x = 1 year per second).
 const SPEEDS := [1, 5, 25, 100]
 ## Sim time budget per frame, in milliseconds (design, Frame and tick scheduling).
@@ -16,6 +21,7 @@ var last_revision := -1
 var speed_index := 0
 var paused := false
 var year_accumulator := 0.0
+var overlay_index := 0
 
 
 func _ready() -> void:
@@ -48,8 +54,14 @@ func _process(delta: float) -> void:
 			break
 	repaint_if_dirty()
 	label.text = (
-		"year %d · %s · %d years/s"
-		% [sim.tick(), "paused" if paused else "running", SPEEDS[speed_index]]
+		"year %d · %s · %d years/s · %s · peoples %d"
+		% [
+			sim.tick(),
+			"paused" if paused else "running",
+			SPEEDS[speed_index],
+			overlay_name(),
+			sim.culture_count(),
+		]
 	)
 
 
@@ -62,6 +74,9 @@ func _input(event: InputEvent) -> void:
 				speed_index = maxi(speed_index - 1, 0)
 			KEY_BRACKETRIGHT:
 				speed_index = mini(speed_index + 1, SPEEDS.size() - 1)
+			KEY_M:
+				overlay_index = (overlay_index + 1) % OVERLAYS.size()
+				repaint()
 
 
 func repaint_if_dirty() -> void:
@@ -70,8 +85,16 @@ func repaint_if_dirty() -> void:
 	repaint()
 
 
+func overlay_name() -> String:
+	match OVERLAYS[overlay_index]:
+		OVERLAY_CULTURE:
+			return "culture"
+		_:
+			return "biome"
+
+
 func repaint() -> void:
-	var bytes := sim.paint_overlay(OVERLAY_BIOME)
+	var bytes := sim.paint_overlay(OVERLAYS[overlay_index])
 	image.set_data(sim.grid_width(), sim.grid_height(), false, Image.FORMAT_RGBA8, bytes)
 	texture.update(image)
 	last_revision = sim.revision()
