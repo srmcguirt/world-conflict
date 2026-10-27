@@ -1,0 +1,14 @@
+[package]
+name = "sim-core"
+description = "World Conflict simulation core. No Godot dependency: headless cargo test and cargo bench."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Determinism contract: transcendental math goes through libm, not platform intrinsics.
+libm = "0.2"
+# Seeded RNG: one independent stream per system, derived from the world seed.
+rand = { version = "0.9", default-features = false, features = ["std"] }
+rand_pcg = "0.9"

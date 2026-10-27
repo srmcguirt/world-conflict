@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["sim-core", "sim-gd"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# gdext 0.5.5 requires Rust 1.94+.
+rust-version = "1.94"
+license = "MIT"
+
+[workspace.dependencies]
+# Pinned to the api level of the installed engine: Godot 4.7.2 + gdext 0.5.5
+# (design Open Question 5: pin the gdext version that matches Godot).
+godot = { version = "0.5.5", features = ["api-4-7"] }
+sim-core = { path = "sim-core" }
+
+[profile.dev]
+# gdext recommendation: keep file:line info for backtraces, drop type debug info.
+debug = "line-tables-only"
+
+[profile.release]
+# R12: sim-gd wraps every entry point in catch_unwind, so panics must unwind.
+panic = "unwind"

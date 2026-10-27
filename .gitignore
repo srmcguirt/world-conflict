@@ -1,0 +1,13 @@
+/target
+
+# Godot
+.godot/
+exports/
+android/
+
+# macOS
+.DS_Store
+
+# Built GDExtension libraries (rebuilt by `cargo build`, not committed)
+*.dylib
+*.so

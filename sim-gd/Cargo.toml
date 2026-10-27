@@ -1,0 +1,14 @@
+[package]
+name = "sim-gd"
+description = "World Conflict gdext bindings: the only crate that depends on Godot. Holds no sim state."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+godot.workspace = true
+sim-core.workspace = true

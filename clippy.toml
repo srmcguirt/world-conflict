@@ -1,0 +1,6 @@
+# R9: hash iteration order is unstable, which breaks replay determinism.
+# sim-core state and logic must use BTreeMap, Vec, or IndexMap with a fixed hasher.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "determinism: unordered iteration (R9). Use BTreeMap, Vec, or a fixed-hasher IndexMap." },
+    { path = "std::collections::HashSet", reason = "determinism: unordered iteration (R9). Use BTreeSet, Vec, or a fixed-hasher IndexSet." },
+]

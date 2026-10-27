@@ -1,0 +1,17 @@
+//! World Conflict simulation core.
+//!
+//! Pure simulation, no Godot types and no rendering state: everything the game
+//! simulates lives here behind [`world::World`]. The Godot layer lives in the
+//! `sim-gd` crate (design R1: two-crate workspace, so `cargo test` and
+//! `cargo bench` always run headless).
+//!
+//! Determinism contracts:
+//! - one tick = one sim-year in every era (D24);
+//! - one seeded RNG per system, derived from the world seed;
+//! - no `std` hash collections (R9, enforced by clippy `disallowed-types`);
+//! - transcendental math through `libm` (design, Determinism scope).
+
+pub mod world;
+
+/// The simulation world. Re-exported so the gdext layer has one canonical path.
+pub use world::World;
