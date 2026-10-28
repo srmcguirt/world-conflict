@@ -17,6 +17,11 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+; The interface and map are laid out for 1280 x 720 and scale with the
+; window, so fullscreen on a Retina display keeps them readable; "expand"
+; shows more map on wider or taller screens instead of black bars.
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [rendering]
 
