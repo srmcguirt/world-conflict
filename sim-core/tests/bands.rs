@@ -3,8 +3,9 @@
 //!
 //! Outside claimed land people move only as bands: a crowded settlement buds
 //! a band of 25, the band walks a planned route one step a year, and a band of
-//! 8 or more founds a tier-0 camp on unclaimed land. A band whose culture has
-//! drifted past the split distance founds a daughter people. At most 64 walk
+//! 8 or more founds a tier-0 camp on unclaimed land. A band that crossed water
+//! or a mountain range, or whose culture has drifted past the split distance,
+//! founds a daughter people (D21, D24). At most 64 walk
 //! at once, and a band still walking at 100 years heads home to its kin.
 
 use sim_core::bands::{self, Goal};
@@ -144,7 +145,7 @@ fn a_band_founds_a_tier_zero_camp_only_on_unclaimed_land() {
 }
 
 #[test]
-fn a_camp_founds_a_daughter_people_only_when_its_walkers_have_drifted() {
+fn a_camp_founds_a_daughter_people_only_across_terrain_or_drift() {
     let (mut kin_camps, mut daughter_camps) = (0, 0);
     for seed in SEEDS {
         let mut world = World::new(seed);
@@ -164,18 +165,19 @@ fn a_camp_founds_a_daughter_people_only_when_its_walkers_have_drifted() {
                 let drift =
                     culture::distance(&band.culture_vec, &centroids[band.culture_id as usize]);
                 let people = &world.cultures()[settlement.culture_id as usize];
-                if drift > culture::SPLIT_MIN_DISTANCE {
+                if band.crossed() || drift > culture::SPLIT_MIN_DISTANCE {
                     daughter_camps += 1;
                     assert_eq!(
                         people.parent_id,
                         Some(band.culture_id),
-                        "seed {seed}: walkers {drift:.2} from their people found a daughter"
+                        "seed {seed}: walkers that crossed ({}) or drifted {drift:.2} found a daughter",
+                        band.crossed()
                     );
                 } else if settlement.culture_id == band.culture_id {
                     kin_camps += 1;
                 } else {
                     panic!(
-                        "seed {seed}: walkers only {drift:.2} from their people founded {}",
+                        "seed {seed}: walkers that stayed on open land, only {drift:.2} from their people, founded {}",
                         people.name
                     );
                 }

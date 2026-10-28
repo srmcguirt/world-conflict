@@ -198,26 +198,38 @@ fn a_split_creates_a_daughter_with_parent_id_and_a_distinct_vector() {
     // Measured when each daughter is founded, against her mother's centroid
     // the year before: a daughter founded beside her mother's camps can
     // assimilate later, and that rate is the Stage 1 sweep's to report (D21;
-    // author's decision 2026-10-28).
+    // author's decision 2026-10-28). A daughter whose walkers crossed a strait
+    // or a range is distinct by that separation and diverges in isolation
+    // (D24; M1's "separated by terrain").
     let mut world = World::new(1);
-    let mut daughters = 0;
+    let (mut distinct, mut parted) = (0, 0);
     for _ in 0..2_000 {
         let known = world.cultures().len();
         let centroids: Vec<_> = world.cultures().iter().map(|c| c.centroid).collect();
+        let walking: Vec<_> = world.bands().to_vec();
         world.step(1);
         for daughter in &world.cultures()[known..] {
             let parent = daughter.parent_id.expect("every new people has a parent");
-            daughters += 1;
             let distance = culture::distance(&daughter.centroid, &centroids[parent as usize]);
-            assert!(
-                distance >= 0.2,
-                "{} is founded a genuinely different people ({distance:.3})",
-                daughter.name
-            );
+            let crossed = walking.iter().any(|band| {
+                band.culture_id == parent
+                    && band.crossed()
+                    && world.bands().iter().all(|now| now.id != band.id)
+            });
+            if distance >= 0.2 {
+                distinct += 1;
+            } else {
+                assert!(
+                    crossed,
+                    "{} is founded neither different ({distance:.3}) nor across terrain",
+                    daughter.name
+                );
+                parted += 1;
+            }
         }
     }
     assert!(
-        daughters > 0,
+        distinct + parted > 0,
         "peoples split (cultures: {})",
         world.cultures().len()
     );

@@ -39,6 +39,13 @@ pub const MAX_WALKING: usize = 64;
 /// The clock never resets, whether the band re-plans or parts (D10, D16).
 pub const STRANDED_YEARS: u64 = 100;
 
+/// Water hexes that part a band from its people: a strait. Tuned in the sweep.
+const WADE_TO_PART: u8 = 3;
+
+/// Mountain hexes that part a band from its people: a range, not a foothill.
+/// Tuned in the sweep.
+const CLIMB_TO_PART: u8 = 4;
+
 /// Crossing one hex of coastal water, an ocean hex that touches land: dearer
 /// than a mountain, so a band takes a strait only when the land way is long
 /// (D22). Open ocean stays impassable.
@@ -99,12 +106,24 @@ pub struct Band {
     pub headcount: f32,
     pub formed_tick: u64,
     pub goal: Goal,
+    /// Hexes of water and of mountain the band has crossed since it formed:
+    /// enough of either parts it from its people (D24).
+    pub waded: u8,
+    pub climbed: u8,
     /// Steps still to walk, the last first, so the next step pops off the end.
     route: Vec<u32>,
     /// The walkers' own culture, belief and bodies, stamped onto their camp.
     pub culture_vec: [f32; culture::DIMS],
     pub belief: [f32; belief::AXES],
     pub traits: [f32; traits::TRAITS],
+}
+
+impl Band {
+    /// Whether the band has crossed a strait or a range: terrain parts it from
+    /// its people, and its camp founds a daughter people (D24).
+    pub fn crossed(&self) -> bool {
+        self.waded >= WADE_TO_PART || self.climbed >= CLIMB_TO_PART
+    }
 }
 
 /// Walks, grows, splits and buds bands for one sim-year.
@@ -141,6 +160,11 @@ fn walk(world: &mut World, index: usize) -> bool {
     let band = &mut world.bands[index];
     if let Some(next) = band.route.pop() {
         band.tile = next;
+        match world.biome[next as usize] {
+            Biome::Ocean => band.waded = band.waded.saturating_add(1),
+            Biome::Mountain => band.climbed = band.climbed.saturating_add(1),
+            _ => {}
+        }
     }
     if !band.route.is_empty() {
         return false;
@@ -304,9 +328,10 @@ fn room_around(world: &World, tile: usize) -> f32 {
         .sum()
 }
 
-/// Founds a tier-0 camp where the band stands (D7). A camp whose walkers have
-/// drifted past the split distance from their people founds a daughter people;
-/// distance alone does not (D21, amending D20).
+/// Founds a tier-0 camp where the band stands (D7). A camp founds a daughter
+/// people when its walkers crossed water or a mountain range to reach it
+/// (D24), or drifted past the split distance from their people (D21);
+/// distance alone does not.
 fn settle(world: &mut World, index: usize) {
     let band = world.bands[index].clone();
     let tile = band.tile as usize;
@@ -319,7 +344,9 @@ fn settle(world: &mut World, index: usize) {
 /// Whose camp this is: the band's people, or a daughter of it.
 fn camp_people(world: &mut World, band: &Band) -> u16 {
     let parent = &world.cultures[band.culture_id as usize];
-    if culture::distance(&band.culture_vec, &parent.centroid) <= culture::SPLIT_MIN_DISTANCE {
+    let drifted =
+        culture::distance(&band.culture_vec, &parent.centroid) > culture::SPLIT_MIN_DISTANCE;
+    if !band.crossed() && !drifted {
         return band.culture_id;
     }
     culture::push_daughter(
@@ -501,6 +528,8 @@ fn leave(world: &mut World, settlement: usize) -> Band {
         headcount: BUD_SIZE,
         formed_tick: world.tick(),
         goal: Goal::Stranded,
+        waded: 0,
+        climbed: 0,
         route: Vec::new(),
         culture_vec,
         belief,
@@ -603,6 +632,8 @@ mod tests {
             headcount: 20.0,
             formed_tick: world.tick() - STRANDED_YEARS,
             goal: Goal::Land(start as u32),
+            waded: 0,
+            climbed: 0,
             route: vec![start as u32],
             culture_vec: world.culture_vec_of(home),
             belief: [0.0; belief::AXES],

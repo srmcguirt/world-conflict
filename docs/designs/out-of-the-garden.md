@@ -126,7 +126,7 @@ Folding into the existing design: the witness rule still interprets powers; doct
 3. **What "redeem the snake's line" ends in.** Does a redeemed line become Chosen beside Dirt, merge with Dirt, or keep its own path with a new faith? How "empower Dirt" is measured.
 4. **The greatest answer.** The author named the later coming of Jesus as an answer "for freedom from sin and death for believers". Whether and how the game reflects a great late answer is the author's call, and needs care.
 5. **Pacing.** How often people pray, how many prayers wait at once, and what happens at 100× speed so the ledger never floods.
-6. **Budding rules** *(settled 2026-10-28, D20)*. A crowded settlement buds a band of 25; a band over 50 splits in two; once every 25 years a band rolls for a quarrel, likelier with size and low cohesion, and a quarrel ends in parting. A band whose culture has drifted past the split threshold founds a daughter people with a parent id; otherwise its camp stays its people's, however far it walked *(amended 2026-10-28, D21: distance alone made nearly every frontier camp a near-identical people)*. Thresholds are tuned in the sweep.
+6. **Budding rules** *(settled 2026-10-28, D20)*. A crowded settlement buds a band of 25; a band over 50 splits in two; once every 25 years a band rolls for a quarrel, likelier with size and low cohesion, and a quarrel ends in parting. A band that crossed a strait (3+ hexes of water) or a range (4+ hexes of mountain) to reach its land, or whose culture has drifted past the split threshold, founds a daughter people with a parent id; otherwise its camp stays its people's, however far it walked *(amended 2026-10-28, D21: distance alone made nearly every frontier camp a near-identical people; D24: terrain parts peoples)*. Thresholds are tuned in the sweep.
 7. **Interaction with existing milestones** *(settled by eng review D14 and D20)*. M1's "3+ distinct peoples by year 2,000" gate stays; new peoples come from bands settling far from kin or drifting apart (D20). Mechanism tests are rewritten under the regression contract (D14).
 
 8. **Recognition.** What makes a notable of the snake's line recognize a kept promise in another people's verse (the copy alone, a belief or piety threshold, a deterministic roll), and how far belief moves when it does. Blocks step 8.
@@ -691,3 +691,23 @@ State: approved
 Actual answer: A) Test the founding (D23, user answer 2026-10-28)
 Raised building step 2: a camp daughter is founded beside its mother's camps, and the existing border blending pulls about half of them back under 0.2 by sim-year 2,000 (10 of 27 stay apart on seed 1, against 58 of 59 before bands, when daughters were terrain-separated).
 Accepted scope: M1's test checks that every daughter is founded at least 0.2 from her mother's centroid; whether daughters assimilate afterward is a rate the Stage 1 sweep reports, for tuning blending.
+
+### R19: Massed continents from a supercontinent's breakup (worldgen)
+
+State: approved
+Actual answer: breakup and drift (D25, user requests 2026-10-28: "less isolated and stringy, with more massed areas similar to actual earth form and continental movement"; "continental division and drift generation that spawns at random points"; "volcanic activities ... forming island chains ... plus mountain erosion and smoothing from weather")
+Accepted scope: one supercontinent covering 42% of the sphere breaks along rifts between twelve plates seeded at random points; each plate turns 0.12-0.55 rad about its own pole to the starting map. Colliding continents fold into a plateau crossed by ridged ranges, a continent over ocean floor raises a coastal range, two ocean floors raise island arcs, and gaps open young ocean. Noise is sampled in each plate's own frame, so coasts travel with their continent and facing coasts match. Ten hotspots fixed in the mantle leave volcano chains along each plate's path, youngest tallest, with gaps where the hotspot slept. Four passes of thermal erosion and weathering wear ranges into foothills. The shore sits midway between continental and oceanic crust; heights rescale against the 99.8th percentile. The fBm weights its broadest octave most. Ten seeds: land 31%, mountains 9% of land, deserts 13%, settleable tiles 3,043 against 4,127 before. 17 ms a world.
+
+### R20: Terrain parts peoples (amends D21)
+
+State: approved
+Actual answer: A) Terrain parts them (D24, user answer 2026-10-28)
+Raised by D25: on massed continents few frontiers are isolated, so drift alone left seeds 1 and 4 with only the two lines at sim-year 2,000.
+Accepted scope: a band that crossed 3+ hexes of water or 4+ of mountain to reach its land founds a daughter people, as well as by drift. Single hexes (a bay shortcut, a foothill) do not count; at one water hex seed 5 made 85 peoples. Eight seeds at 2,000 years: 2 to 29 peoples (most 7 to 26). M1's split test accepts a daughter founded across terrain as distinct (M1's "separated by terrain"); a drift daughter must still be founded 0.2 apart. Seed 4 stays at two peoples: its Garden is on a small landmass bands rarely leave.
+
+### R21: The Garden on the largest landmass (narrows D18)
+
+State: proposed, awaiting the author
+Raised by D25: on seeds 1, 4 and 5 the single best tile was on an island of 127-211 tiles, out of about 4,000 land tiles, and humanity never left it (123 settled tiles at sim-year 2,000 on seed 1).
+Built for review: the Garden sits on the best land of the largest landmass joined over land.
+

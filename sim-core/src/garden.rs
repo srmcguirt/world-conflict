@@ -1,7 +1,8 @@
 //! The generated founding (design, Out of the Garden step 1; D18, D19, D4).
 //!
 //! The seed decides the world, and the world decides the founding, so the
-//! Garden needs no RNG of its own: it sits on the best land, and nobody stays.
+//! Garden needs no RNG of its own: it sits on the best land of the largest
+//! landmass, and nobody stays.
 //! Of its neighbors, Dirt takes the most arable and offers its harvest; the
 //! snake's line takes the high ground, offers the work of its hands, and
 //! starts turned from the god and toward force. Ties break on the lower tile
@@ -52,17 +53,51 @@ pub fn plant(world: &mut World) {
     write_founding(world, garden, homes);
 }
 
-/// The settleable tile with the most carrying capacity.
+/// The settleable tile with the most carrying capacity on the largest
+/// landmass, so humanity starts where it can spread (D18; D26).
 fn best_land(world: &World) -> Option<usize> {
+    let mainland = largest_landmass(world);
     let mut best = None;
     let mut most = -1.0_f32;
-    for i in 0..world.biome.len() {
-        if worldgen::settleable(world.biome[i]) && world.carrying_capacity[i] > most {
+    for (i, &on_mainland) in mainland.iter().enumerate() {
+        if on_mainland && worldgen::settleable(world.biome[i]) && world.carrying_capacity[i] > most
+        {
             most = world.carrying_capacity[i];
             best = Some(i);
         }
     }
     best
+}
+
+/// Which tiles belong to the largest stretch of land joined over land (the
+/// lower first tile wins a tie).
+fn largest_landmass(world: &World) -> Vec<bool> {
+    let tiles = world.biome.len();
+    let land = |i: usize| !matches!(world.biome[i], Biome::Ocean | Biome::Ice);
+    let mut mass = vec![usize::MAX; tiles];
+    let mut sizes = Vec::new();
+    for start in 0..tiles {
+        if !land(start) || mass[start] != usize::MAX {
+            continue;
+        }
+        let label = sizes.len();
+        let mut size = 0;
+        let mut stack = vec![start];
+        mass[start] = label;
+        while let Some(tile) = stack.pop() {
+            size += 1;
+            for (x, y) in hex::neighbors(tile % GRID_WIDTH, tile / GRID_WIDTH) {
+                let next = y * GRID_WIDTH + x;
+                if land(next) && mass[next] == usize::MAX {
+                    mass[next] = label;
+                    stack.push(next);
+                }
+            }
+        }
+        sizes.push(size);
+    }
+    let largest = (0..sizes.len()).max_by_key(|&l| (sizes[l], std::cmp::Reverse(l)));
+    mass.iter().map(|&m| Some(m) == largest).collect()
 }
 
 /// Where each line settles: Dirt on the most arable neighbor, the snake's line
