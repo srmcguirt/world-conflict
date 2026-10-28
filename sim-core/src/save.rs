@@ -31,7 +31,7 @@ use crate::world::World;
 /// the Garden step 1).
 ///
 /// 3: walking bands and the settlement fields they need (Out of the Garden
-/// step 2).
+/// step 2), and the ground geology last applied (D27).
 pub const SAVE_VERSION: u32 = 3;
 
 const MAGIC: &[u8; 4] = b"WCSV";

@@ -65,6 +65,18 @@ const COAST_NOISE: f32 = 0.35;
 const DRIFT_MIN: f32 = 0.12;
 const DRIFT_MAX: f32 = 0.55;
 
+/// How far the plates turn during play, as a share of their drift before
+/// year 0, over [`PLAY_SPAN_YEARS`]: the fastest cross about 13 tiles, an
+/// ocean opening as wide as a young Atlantic (D27). Tuned in the sweep.
+const PLAY_DRIFT: f32 = 0.9;
+
+/// The span of play the drift above is measured over (design: "how you
+/// behaved for 5,000 years").
+const PLAY_SPAN_YEARS: f32 = 5_000.0;
+
+/// Height of the supercontinent's ancient, worn ranges.
+const OLD_RANGES: f32 = 0.22;
+
 /// Height two continents add where they collide and fold.
 const UPLIFT: f32 = 0.6;
 
@@ -115,6 +127,7 @@ const SEED_PLATES: u64 = 0x91A7_E5C0_0000_0001;
 const SEED_WARP: u64 = 0x5EA1_0000_77A3_0002;
 const SEED_COAST: u64 = 0xC0A5_7000_0000_0003;
 const SEED_HOTSPOTS: u64 = 0x407_5907_0000_0004;
+const SEED_SUTURES: u64 = 0x5_0700_0000_0005;
 
 /// The six biomes of the first playable (design, Milestone 1).
 ///
@@ -185,7 +198,7 @@ pub fn generate(seed: u64) -> GeneratedWorld {
         carrying_capacity: vec![0.0; tiles],
     };
 
-    let elevation_field = elevation(seed);
+    let elevation_field = elevation_at(seed, 0);
     for y in 0..GRID_HEIGHT as i32 {
         let lat = latitude_deg(y as usize);
         let area = latitude_area_factor(lat);
@@ -286,13 +299,24 @@ struct Breakup {
     seed: u64,
 }
 
-/// Normalized elevation for every tile: the broken supercontinent, its
-/// collisions and rifts, then relief, rescaled so the shore falls midway
-/// between continental and oceanic crust.
-fn elevation(seed: u64) -> Vec<f32> {
-    let breakup = Breakup::new(seed);
+/// Normalized elevation for every tile `years` into play: the broken
+/// supercontinent, its collisions and rifts, then relief, rescaled so the
+/// shore falls midway between continental and oceanic crust. The plates keep
+/// drifting during play (D27), so the same seed at a later year gives the
+/// same land moved on: rifts wider, collisions higher, hotspot chains longer.
+pub fn elevation_at(seed: u64, years: u64) -> Vec<f32> {
     let mut raw = vec![0.0_f32; GRID_WIDTH * GRID_HEIGHT];
-    for y in 0..GRID_HEIGHT as i32 {
+    crust_rows(seed, years, 0..GRID_HEIGHT, &mut raw);
+    finish_ground(seed, years, raw)
+}
+
+/// The costly half of [`elevation_at`], a band of rows at a time, so geology
+/// can spread it over the years before a pass (D27): each plate's crust plus
+/// relief, before erosion.
+pub fn crust_rows(seed: u64, years: u64, rows: std::ops::Range<usize>, raw: &mut [f32]) {
+    let breakup = Breakup::new(seed, years);
+    for y in rows {
+        let y = y as i32;
         for x in 0..GRID_WIDTH as i32 {
             let i = y as usize * GRID_WIDTH + x as usize;
             let detail = fbm(x, y, seed ^ SEED_ELEVATION) - 0.5;
@@ -301,9 +325,14 @@ fn elevation(seed: u64) -> Vec<f32> {
             raw[i] = crust + DETAIL * detail + ROUGHNESS * rough;
         }
     }
+}
+
+/// The cheap, whole-map half of [`elevation_at`]: erosion, then volcanoes,
+/// then the rescale to sea level.
+pub fn finish_ground(seed: u64, years: u64, mut raw: Vec<f32>) -> Vec<f32> {
     erode(&mut raw);
     // Volcanoes after weathering: a cone's age already wears it down.
-    breakup.volcanoes(&mut raw);
+    Breakup::new(seed, years).volcanoes(&mut raw);
     rescale(&raw)
 }
 
@@ -338,8 +367,10 @@ fn erode(raw: &mut [f32]) {
 
 impl Breakup {
     /// Seeded supercontinent near the equator, plates at random points (the
-    /// rifts run between them), and a random drift for each plate.
-    fn new(seed: u64) -> Self {
+    /// rifts run between them), and a random drift for each plate, carried
+    /// on `years` into play.
+    fn new(seed: u64, years: u64) -> Self {
+        let carried_on = 1.0 + PLAY_DRIFT * years as f32 / PLAY_SPAN_YEARS;
         let unit =
             |k: u32, n: u32| hash2(k as i32, n as i32, seed ^ SEED_PLATES) as f32 / u32::MAX as f32;
         let on_sphere = |z: f32, lon: f32| {
@@ -350,7 +381,7 @@ impl Breakup {
             .map(|k| Plate {
                 center: on_sphere(unit(k, 0) * 2.0 - 1.0, unit(k, 1) * TAU),
                 axis: on_sphere(unit(k, 2) * 2.0 - 1.0, unit(k, 3) * TAU),
-                angle: DRIFT_MIN + (DRIFT_MAX - DRIFT_MIN) * unit(k, 4),
+                angle: (DRIFT_MIN + (DRIFT_MAX - DRIFT_MIN) * unit(k, 4)) * carried_on,
             })
             .collect();
         // A spherical cap's share of the sphere is (1 - cos r) / 2.
@@ -386,7 +417,7 @@ impl Breakup {
                     let erupted = unit(spot * 64 + k as u32, step + 8) > QUIET_SHARE;
                     if carried && erupted {
                         // Old volcanoes wear and sink, but their stumps stay.
-                        let youth = (1.0 - age / DRIFT_MAX).max(0.35);
+                        let youth = (1.0 - age / plate.angle.max(DRIFT_MAX)).max(0.35);
                         cone(raw, tile_of(now), VOLCANO * youth);
                     }
                     age += TRACK_STEP;
@@ -466,7 +497,13 @@ impl Breakup {
         let inland =
             ((self.radius + edge - arc(origin, self.heart)) / SHELF_WIDTH).clamp(-1.0, 1.0);
         let mid = f32::midpoint(CONTINENT_HEIGHT, OCEAN_HEIGHT);
-        mid + (CONTINENT_HEIGHT - OCEAN_HEIGHT) * 0.5 * inland
+        let crust = mid + (CONTINENT_HEIGHT - OCEAN_HEIGHT) * 0.5 * inland;
+        // Ancient ranges from the supercontinent's own assembly, long worn
+        // low: the breakup splits them onto facing coasts, as the Atlantic
+        // split one old chain into the Appalachians and the highlands of
+        // Britain and Norway.
+        let suture = fbm(x, y, self.seed ^ SEED_SUTURES) - 0.5;
+        crust + OLD_RANGES * ridge(suture) * inland.max(0.0)
     }
 }
 

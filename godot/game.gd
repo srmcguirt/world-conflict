@@ -79,6 +79,7 @@ var _drag_origin := Vector2.ZERO
 var _last_revision := -1
 var _last_overlay := -1
 var _ground_checks := 0  # repaints left to look for a reshaped ground
+var _last_ground := 0  # the sim's ground revision the terrain was built from
 var _ghost_layers: Array[Node2D] = []
 var _views := {}  # founding tile -> SettlementView, with its ghosts in _ghost_views
 var _ghost_views := {}  # founding tile -> [west copy, east copy]
@@ -366,12 +367,16 @@ func repaint_if_dirty() -> void:
 	color_texture.update(color_image)
 	code_image.set_data(grid_w, grid_h, false, Image.FORMAT_RGBA8, sim.tile_codes())
 	code_texture.update(code_image)
-	# Only powers move the ground, so heights are compared only for a few
-	# repaints after one is cast; the terrain rebuilds just the bands nearby.
+	# Powers and geology move the ground, so heights are compared only for a
+	# few repaints after a cast or a geology pass (D27); the terrain rebuilds
+	# just the bands nearby.
+	if sim.ground_revision() != _last_ground:
+		_last_ground = sim.ground_revision()
+		_ground_checks = maxi(_ground_checks, 1)
 	if _ground_checks > 0:
 		_ground_checks -= 1
 		var changed: PackedInt32Array = sim.changed_tiles(terrain.heights())
-		if terrain.update_heights(changed, sim.tile_heights()):
+		if terrain.update_heights(changed, sim.tile_heights(), sim.tile_biomes()):
 			_reseat_settlements()
 	_refresh_settlements()
 

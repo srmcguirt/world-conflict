@@ -42,17 +42,23 @@ fn tiers_are_percentiles_of_the_claimed_catchments() {
 
     // Sort catchment populations descending; the top 1% are cities, the next
     // 4% towns, the next 20% villages, the rest camps.
-    let mut pops: Vec<f32> = settlements.iter().map(|s| s.population).collect();
+    // A settlement whose land was released claims nothing and is not ranked
+    // (D16).
+    let living: Vec<_> = settlements
+        .iter()
+        .filter(|s| !s.catchment.is_empty())
+        .collect();
+    let mut pops: Vec<f32> = living.iter().map(|s| s.population).collect();
     pops.sort_by(|a, b| b.total_cmp(a));
     let n = pops.len();
     let city_cut = pops[((n as f32 * 0.01).ceil() as usize).clamp(1, n) - 1];
     let town_cut = pops[((n as f32 * 0.05).ceil() as usize).clamp(1, n) - 1];
     let village_cut = pops[((n as f32 * 0.25).ceil() as usize).clamp(1, n) - 1];
 
-    let cities = settlements.iter().filter(|s| s.tier == 3).count();
-    let towns = settlements.iter().filter(|s| s.tier == 2).count();
-    let villages = settlements.iter().filter(|s| s.tier == 1).count();
-    let camps = settlements.iter().filter(|s| s.tier == 0).count();
+    let cities = living.iter().filter(|s| s.tier == 3).count();
+    let towns = living.iter().filter(|s| s.tier == 2).count();
+    let villages = living.iter().filter(|s| s.tier == 1).count();
+    let camps = living.iter().filter(|s| s.tier == 0).count();
 
     // Cities are rare: roughly 1% of settlements.
     assert!(
@@ -62,7 +68,7 @@ fn tiers_are_percentiles_of_the_claimed_catchments() {
     assert!(camps > villages, "camps outnumber villages");
     assert!(camps > 0, "there are camps");
     // Every settlement's tier matches its population against the cuts.
-    for s in settlements {
+    for s in &living {
         let expected: u8 = if s.population >= city_cut {
             3
         } else if s.population >= town_cut {
@@ -72,10 +78,17 @@ fn tiers_are_percentiles_of_the_claimed_catchments() {
         } else {
             0
         };
-        assert_eq!(
-            s.tier, expected,
+        // A settlement keeps a higher tier through one check below it before
+        // it drops (hysteresis, design: two checks); with geology moving
+        // people off sinking land, some are always mid-decline (D27).
+        let waiting_to_drop = s.tier > expected && s.tier_checks_below == 1;
+        assert!(
+            s.tier == expected || waiting_to_drop,
             "settlement {} population {} tier {} expected {}",
-            s.id, s.population, s.tier, expected
+            s.id,
+            s.population,
+            s.tier,
+            expected
         );
     }
     let _ = (towns, villages);

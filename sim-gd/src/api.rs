@@ -536,6 +536,12 @@ impl Sim {
             .collect()
     }
 
+    /// Bumped whenever geology moves the ground, so the map rebuilds it (D27).
+    #[func]
+    fn ground_revision(&self) -> i64 {
+        self.world.ground_revision() as i64
+    }
+
     /// Elevation per tile, in [0, 1], for the isometric renderer's geometry.
     #[func]
     fn tile_heights(&self) -> PackedFloat32Array {

@@ -400,6 +400,45 @@ fn stamp(world: &mut World, tile: usize, people: u16, band: &Band) {
     world.traits[tile * traits::TRAITS..(tile + 1) * traits::TRAITS].copy_from_slice(&band.traits);
 }
 
+/// People driven off sinking land leave as a band from where they stood, if
+/// a walking slot is free; otherwise the sea takes them (D27).
+pub(crate) fn refugees(world: &mut World, tile: usize, culture_id: u16, headcount: f32) {
+    if world.bands.len() >= MAX_WALKING {
+        return;
+    }
+    let mut belief = [0.0; belief::AXES];
+    belief.copy_from_slice(&world.belief[tile * belief::AXES..(tile + 1) * belief::AXES]);
+    let mut traits = [0.0; traits::TRAITS];
+    traits.copy_from_slice(&world.traits[tile * traits::TRAITS..(tile + 1) * traits::TRAITS]);
+    let band = Band {
+        id: next_id(world),
+        culture_id,
+        tile: tile as u32,
+        headcount,
+        formed_tick: world.tick(),
+        goal: Goal::Stranded,
+        waded: 0,
+        climbed: 0,
+        route: Vec::new(),
+        culture_vec: world.culture_vec_of(tile),
+        belief,
+        traits,
+    };
+    world.bands.push(band);
+    let index = world.bands.len() - 1;
+    plan_land(world, index);
+}
+
+/// The land moved under the walkers: every band still looking for land
+/// plans again from where it stands, on the same clock.
+pub(crate) fn replan_after_geology(world: &mut World) {
+    for index in 0..world.bands.len() {
+        if matches!(world.bands[index].goal, Goal::Land(_)) {
+            plan_land(world, index);
+        }
+    }
+}
+
 /// Bands over [`SPLIT_ABOVE`] split in two while there are walking slots.
 fn split_large(world: &mut World) {
     for index in 0..world.bands.len() {

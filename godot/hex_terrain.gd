@@ -154,10 +154,13 @@ func build_next() -> float:
 # Rebuilds only what a power reshaped (Raise, Lower, Meteor): the changed
 # tiles, the tiles within REACH of them, and the bands those tiles sit in.
 # Returns true when anything changed, so settlements can re-seat themselves.
-func update_heights(changed: PackedInt32Array, heights: PackedFloat32Array) -> bool:
+func update_heights(
+	changed: PackedInt32Array, heights: PackedFloat32Array, biomes: PackedByteArray
+) -> bool:
 	if changed.is_empty():
 		return false
 	_heights = heights
+	_biomes = biomes
 	var region := _around(changed)
 	_terrace(region)
 	_slope_corners(region)

@@ -711,3 +711,9 @@ State: proposed, awaiting the author
 Raised by D25: on seeds 1, 4 and 5 the single best tile was on an island of 127-211 tiles, out of about 4,000 land tiles, and humanity never left it (123 settled tiles at sim-year 2,000 on seed 1).
 Built for review: the Garden sits on the best land of the largest landmass joined over land.
 
+
+### R22: Geology during play (D27)
+
+State: approved
+Actual answer: the plates keep drifting through play (user requests 2026-10-28: "bigger rifts almost like how the Appalachian mountains and the Atlantic Ocean have with the British isles and coast of Europe ... to separate and make them adapt as time passes"; "Land slamming into other land masses should be part of the map getting settled"; "volcanic activities that continue all the time").
+Accepted scope: each plate turns a further 90% of its pre-year-0 drift over 5,000 years, so the fastest cross about 13 tiles: rifts widen into young seas, collisions fold ranges and close seas into land bridges, hotspot chains grow. The supercontinent carries ancient worn ranges that the breakup splits onto facing coasts. Every 50 years the land is regenerated for the year from the seed (built a few rows a year so no single year carries it) and applied as a shift, so a power's raise or lower stays. A tile that stops being livable (sea, or pushed up into mountain) moves its people into the rest of their land, else away as a refugee band; a drowned tile leaves its catchment; an unlivable seat moves to the settlement's most populous land. Walking bands re-plan. The map rebuilds its terrain on each pass. A geology year adds about 1.7 ms; the 25-year passes already ran 7-8.5 ms and some budding years 24 ms before this, over the 8 ms budget (a separate fix). M6a's tier test now allows the design's one-check demotion grace, and ranks only settlements that still hold land.

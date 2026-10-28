@@ -13,6 +13,7 @@ use crate::belief::{self, Belief};
 use crate::culture::{self, Culture, NO_CULTURE};
 use crate::demography;
 use crate::faith::{self, Faith};
+use crate::geology;
 pub use crate::hex;
 use crate::language;
 use crate::language::Language;
@@ -153,6 +154,15 @@ pub struct World {
     pub(crate) bud_cursor: u32,
     /// The bands' own RNG stream, for quarrels and founder mutation.
     pub(crate) band_rng: Pcg64,
+    /// Each tile's elevation from geology alone, as last applied, so the
+    /// moving land shifts tiles without undoing a power's raise or lower
+    /// (D27).
+    pub(crate) ground: Vec<f32>,
+    /// Bumped whenever geology moves the ground, so the map rebuilds it.
+    pub(crate) ground_revision: u64,
+    /// The next geology pass, built a few rows a year; derived, not saved.
+    #[serde(skip)]
+    pub(crate) pending_ground: geology::Pending,
 }
 
 impl World {
@@ -167,6 +177,7 @@ impl World {
             carrying_capacity,
         } = worldgen::generate(seed);
         let base_capacity = carrying_capacity.clone();
+        let ground = elevation.clone();
 
         let tiles = GRID_WIDTH * GRID_HEIGHT;
         let mut world = Self {
@@ -209,6 +220,9 @@ impl World {
             next_band_id: 0,
             bud_cursor: u32::MAX,
             band_rng: Pcg64::seed_from_u64(seed ^ 0xB4D5_0000_0000_0007),
+            ground,
+            ground_revision: 0,
+            pending_ground: geology::Pending::default(),
         };
         crate::garden::plant(&mut world);
         world.faiths.push(Faith {
@@ -381,6 +395,11 @@ impl World {
     }
 
     /// Every settlement, indexed by settlement id.
+    /// Bumped whenever geology moves the ground (D27).
+    pub fn ground_revision(&self) -> u64 {
+        self.ground_revision
+    }
+
     pub fn bands(&self) -> &[bands::Band] {
         &self.bands
     }
@@ -802,6 +821,7 @@ impl World {
         self.apply_queued_actions();
         self.tick_beasts();
         self.tick_blessings();
+        geology::tick_geology(self);
 
         // Climate (rare) -> Population -> Migration -> Drift/Blend -> Traits
         //   -> Belief -> Polity -> Tech -> War
