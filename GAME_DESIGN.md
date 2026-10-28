@@ -900,6 +900,20 @@ The game shows this before you confirm: "The world is mostly righteous. Your peo
 - Notarization (needs a paid Apple Developer account) is out of scope until a Steam or wider release.
 - Stretch: a Web build (Milestone 5), using gdext's experimental wasm and SharedArrayBuffer enabled on itch.io if threads are used.
 - Upload with itch.io's `butler` CLI. A GitHub Actions export job (for example with a Godot CI container) is optional once releases become routine.
+- **Windows build** *(user decision 2026-10-27: after the first Mac itch release, built on a GitHub Actions Windows runner)*. The Mac release proves the pipeline first; Windows follows before any wider playtest, since most itch players are on Windows.
+  - **Target:** 64-bit x86 Windows (`x86_64-pc-windows-msvc`). Windows on ARM runs x86_64 under emulation and is not a separate build.
+  - **Where it builds:** a `windows` job in CI on `windows-latest`, never cross-compiled from the Mac (Rust's MSVC target needs the Windows SDK, which only the runner has). It runs on tags (and by hand), not on every push, so day-to-day CI stays fast.
+  - **What the job does, mirroring `scripts/release.sh`:**
+    1. Install Rust 1.98.0 (the same pin as the Rust jobs) and build the release library: `cargo build --release -p sim-gd --locked`, giving `sim_gd.dll`.
+    2. Copy it to `godot/bin/sim_gd.dll`. `sim.gdextension` gains `windows.release.x86_64 = "res://bin/sim_gd.dll"` (and a debug entry for the exporting editor).
+    3. Download Godot 4.7.2 and its export templates, check both against Godot's published `SHA512-SUMS.txt`, and install only the Windows template.
+    4. Export a new `Windows Desktop` preset (x86_64, no console wrapper in release) to `exports/World Conflict (Windows).zip`.
+    5. Verify: the DLL is inside the export, and a smoke run of the exported `.exe` reaches the map (the same `--shots` check the Mac script uses), so a build with a missing or broken sim fails CI instead of reaching players.
+    6. Upload the zip as a workflow artifact, and attach it to the GitHub release for that tag.
+  - **Signing:** unsigned at first. Windows SmartScreen shows "Windows protected your PC"; the itch page tells players to choose *More info → Run anyway*, as the Mac page explains *Open Anyway*. A code-signing certificate is out of scope until a Steam or wider release, like Mac notarization.
+  - **itch.io:** pushed with `butler` to its own channel (`windows`), beside `mac`, so the itch app patches each platform separately.
+  - **Saves and replay:** the save format is fixed little-endian (postcard), so a Mac save loads on Windows and the reverse. Exact *replay* stays guaranteed only on the same platform and build (Determinism scope; R11); a cross-platform save loads as a snapshot.
+  - **Done when:** a tagged release produces both zips, the Windows smoke run passes on the runner, and one Windows player opens a Mac player's save.
 
 ## Next Steps
 1. Install Godot 4 (latest stable, standard non-.NET build) and Rust (`rustup`). In `/Users/smcguirt/Projects/world-conflict`, run `git init`, then lay out:
