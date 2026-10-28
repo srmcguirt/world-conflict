@@ -1,8 +1,9 @@
 [advisories]
-vulnerability = "deny"
-unmaintained = "warn"
+# cargo-deny's v2 format: vulnerabilities are always denied; unmaintained
+# crates are checked across every dependency (the v1 "warn" is gone).
+version = 2
+unmaintained = "all"
 yanked = "deny"
-notice = "warn"
 ignore = []
 
 [licenses]
@@ -23,6 +24,8 @@ confidence-threshold = 0.9
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Path dependencies between this workspace's own unpublished crates.
+allow-wildcard-paths = true
 highlight = "all"
 
 [sources]

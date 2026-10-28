@@ -8,6 +8,9 @@ edition = "2024"
 # gdext 0.5.5 requires Rust 1.94+.
 rust-version = "1.94"
 license = "MIT"
+# A game, never a crates.io library; also lets cargo-deny accept the
+# workspace path dependency (deny.toml allow-wildcard-paths).
+publish = false
 
 [workspace.dependencies]
 # Pinned to the api level of the installed engine: Godot 4.7.2 + gdext 0.5.5
