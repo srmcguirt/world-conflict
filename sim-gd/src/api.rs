@@ -443,12 +443,15 @@ impl Sim {
 
     /// Every settlement as four ints — founding tile, tier, culture id,
     /// finished buildings — so the renderer can stand its houses on the map
-    /// (design, Rendering: settlements are buildings).
+    /// (design, Rendering: settlements are buildings). A settlement whose land
+    /// the sea took or that emptied keeps its record but stands nowhere (D16,
+    /// D27).
     #[func]
     fn settlement_sites(&self) -> PackedInt32Array {
         self.world
             .settlements()
             .iter()
+            .filter(|settlement| !settlement.catchment.is_empty())
             .flat_map(|settlement| {
                 [
                     settlement.tile as i32,
