@@ -443,7 +443,7 @@ func _set_zoom(z: float) -> void:
 
 
 # Home for the camera (design, Finding your people): the Chosen's largest
-# settlement, or Eden before there is one. Averaging their tiles would land in
+# settlement, or the Garden before there is one. Averaging their tiles would land in
 # the sea when the people straddle the east-west seam.
 func _chosen_center() -> Vector2:
 	var sites: PackedInt32Array = sim.settlement_sites()
@@ -455,8 +455,8 @@ func _chosen_center() -> Vector2:
 			best = sites[s]
 	if best >= 0:
 		return terrain.top(best % grid_w, best / grid_w)
-	var eden: Vector2i = sim.eden_tile()
-	return terrain.top(eden.x, eden.y)
+	var garden: Vector2i = sim.garden_tile()
+	return terrain.top(garden.x, garden.y)
 
 
 # Esc clears an armed power or a selection first; only an Esc with nothing

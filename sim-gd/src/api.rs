@@ -170,10 +170,10 @@ impl Sim {
         self.world.cultures().len() as i64
     }
 
-    /// The tile humanity started on, for the H home key (design D2).
+    /// The Garden, where humanity began, for the H home key (design D2).
     #[func]
-    fn eden_tile(&self) -> Vector2i {
-        match self.world.eden_tile() {
+    fn garden_tile(&self) -> Vector2i {
+        match self.world.garden_tile() {
             Some(tile) => Vector2i::new((tile % GRID_WIDTH) as i32, (tile / GRID_WIDTH) as i32),
             None => Vector2i::new(-1, -1),
         }

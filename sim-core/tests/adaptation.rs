@@ -60,20 +60,25 @@ fn the_sun_writes_skin() {
 fn highlanders_grow_lungs() {
     let mut world = World::new(2);
     world.step(100);
-    let culture = world.cultures()[0].id;
-    // Whatever land they hold now, force every trait axis to its floor and let
-    // the environment pull it back up.
-    for axis in 0..TRAITS {
-        set_culture_trait(&mut world, culture, axis, 0.0);
+    // Whatever land every people holds now, force every trait axis to its
+    // floor and let the environment pull it back up. Every people, because
+    // the two lines split the Garden's land: the snake's line takes the high
+    // ground (Out of the Garden, D18).
+    let peoples: Vec<u16> = world.cultures().iter().map(|c| c.id).collect();
+    for &culture in &peoples {
+        for axis in 0..TRAITS {
+            set_culture_trait(&mut world, culture, axis, 0.0);
+        }
     }
     world.step(300);
 
-    // Somewhere in the people's range there is high ground: its people should
+    // Somewhere in the peoples' range there is high ground: its people should
     // have moved clearly off the floor. Low plains move skin and stature only.
     let mut best_altitude = 0.0_f32;
     let mut coldest_temperature = 1.0_f32;
     for tile in 0..world.population.len() {
-        if world.culture_id[tile] != culture || world.population[tile] < 1.0 {
+        // Daughters split off after the reset carry its tiles' floored traits.
+        if world.culture_id[tile] == sim_core::culture::NO_CULTURE || world.population[tile] < 1.0 {
             continue;
         }
         best_altitude = best_altitude.max(of(&world, tile)[traits::ALTITUDE]);
@@ -200,8 +205,10 @@ fn looks_cost_nothing() {
 fn a_witness_takes_the_traits_of_their_people() {
     let mut world = World::new(5);
     world.step(50);
-    let eden = world.eden_tile().expect("Eden exists");
-    world.queue_power(sim_core::powers::Power::Meteor, eden % 160, eden / 160);
+    let home = world
+        .line_home(sim_core::culture::Line::Dirt)
+        .expect("Dirt is planted");
+    world.queue_power(sim_core::powers::Power::Meteor, home % 160, home / 160);
     world.step(5);
 
     let witness = world
@@ -220,8 +227,10 @@ fn a_witness_takes_the_traits_of_their_people() {
 fn the_portrait_is_stable_and_personal() {
     let mut world = World::new(5);
     world.step(50);
-    let eden = world.eden_tile().expect("Eden exists");
-    world.queue_power(sim_core::powers::Power::Meteor, eden % 160, eden / 160);
+    let home = world
+        .line_home(sim_core::culture::Line::Dirt)
+        .expect("Dirt is planted");
+    world.queue_power(sim_core::powers::Power::Meteor, home % 160, home / 160);
     world.step(5);
     let witness = world.witnesses().into_iter().next().unwrap();
 

@@ -262,8 +262,11 @@ pub fn native_line(world: &World, culture_id: u16, verse: &crate::scripture::Ver
             crate::faith::Doctrine::Absent => LEX_ABSENT,
         },
         crate::scripture::VerseKind::Anoint { .. } => LEX_FATE,
-        crate::scripture::VerseKind::Protest => LEX_PEOPLE,
+        crate::scripture::VerseKind::Protest | crate::scripture::VerseKind::Parting { .. } => {
+            LEX_PEOPLE
+        }
         crate::scripture::VerseKind::Riot => LEX_WRATH,
+        crate::scripture::VerseKind::Offering(_) => LEX_GIFT,
     };
     format!(
         "{} {} {} {} {}",

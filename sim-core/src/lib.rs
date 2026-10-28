@@ -17,6 +17,7 @@ pub mod culture;
 pub mod demography;
 pub mod events;
 pub mod faith;
+pub mod garden;
 pub mod hex;
 pub mod language;
 pub mod names;

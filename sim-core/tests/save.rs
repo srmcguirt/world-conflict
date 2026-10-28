@@ -12,10 +12,10 @@ const SEED: u64 = 7;
 
 /// A player's hand: a few powers at fixed years, aimed at the Chosen's home.
 fn act(world: &mut World) {
-    let Some(eden) = world.eden_tile() else {
+    let Some(home) = world.line_home(sim_core::culture::Line::Dirt) else {
         return;
     };
-    let (x, y) = (eden % GRID_WIDTH, eden / GRID_WIDTH);
+    let (x, y) = (home % GRID_WIDTH, home / GRID_WIDTH);
     match world.tick() {
         150 => world.queue_power(Power::Bless, x, y),
         420 => world.queue_power(Power::Meteor, x + 3, y),
@@ -69,8 +69,10 @@ fn a_power_queued_before_saving_still_lands_after_loading() {
     // the snapshot (design, Snapshot contents: pending queued actions).
     let mut straight = played(300);
     let mut paused = played(300);
-    let eden = straight.eden_tile().expect("Eden");
-    let (x, y) = (eden % GRID_WIDTH, eden / GRID_WIDTH);
+    let home = straight
+        .line_home(sim_core::culture::Line::Dirt)
+        .expect("Dirt is planted");
+    let (x, y) = (home % GRID_WIDTH, home / GRID_WIDTH);
     straight.queue_power(Power::Meteor, x, y);
     paused.queue_power(Power::Meteor, x, y);
 

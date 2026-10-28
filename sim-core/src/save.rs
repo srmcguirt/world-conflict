@@ -26,7 +26,10 @@ use crate::world::World;
 
 /// The snapshot layout's version. Bump it whenever any type a `World` holds
 /// gains, loses or reorders a field, or `postcard` would misread old saves.
-pub const SAVE_VERSION: u32 = 1;
+///
+/// 2: the two lines (`Culture::line`, the Garden and each line's home; Out of
+/// the Garden step 1).
+pub const SAVE_VERSION: u32 = 2;
 
 const MAGIC: &[u8; 4] = b"WCSV";
 const PREAMBLE: usize = MAGIC.len() + 4;

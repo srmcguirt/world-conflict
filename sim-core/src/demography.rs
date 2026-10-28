@@ -1,4 +1,4 @@
-//! Demography: Eden, population growth, crowding-driven migration, and
+//! Demography: population growth, crowding-driven migration, and
 //! culture drift/blend (design, Milestones -> 1. Living Map).
 //!
 //! Tick order is fixed (design, Architecture): Population, Migration,
@@ -12,9 +12,6 @@ use rand::Rng;
 use crate::culture::{self, NO_CULTURE};
 use crate::world::{GRID_WIDTH, World};
 use crate::worldgen::{self, Biome};
-
-/// People at Eden when the world starts.
-pub const EDEN_POPULATION: f32 = 8.0;
 
 /// Logistic growth per sim-year.
 const GROWTH_RATE: f32 = 0.12;
@@ -47,56 +44,6 @@ const BLEND_RATE: f32 = 0.020;
 /// Same-culture neighbors diffuse toward each other so a region stays one
 /// people instead of a salt-and-pepper field of vectors.
 const COHESION_RATE: f32 = 0.0;
-
-/// Spawns Eden: one people on the best land the world offers.
-///
-/// The seed decides the world, and the world decides where humanity starts, so
-/// Eden needs no RNG of its own. Ties break on the lower tile index.
-pub fn plant_eden(world: &mut World) {
-    let mut eden = None;
-    let mut best = -1.0_f32;
-    for i in 0..world.biome.len() {
-        if !worldgen::settleable(world.biome[i]) {
-            continue;
-        }
-        let capacity = world.carrying_capacity[i];
-        if capacity > best {
-            best = capacity;
-            eden = Some(i);
-        }
-    }
-    let Some(eden) = eden else { return };
-
-    let centroid = culture::biome_target(world.biome[eden]);
-    world.population[eden] = EDEN_POPULATION;
-    world.culture_id[eden] = 0;
-    for (k, value) in centroid.iter().enumerate() {
-        world.culture_vec[eden * culture::DIMS + k] = *value;
-    }
-    world.eden = Some(eden as u32);
-    let mut culture = culture::Culture::found(
-        0,
-        0,
-        world.seed(),
-        centroid,
-        culture::Favor::Chosen,
-        EDEN_POPULATION,
-        1,
-    );
-    let place = crate::names::place_name(&culture, eden);
-    culture.scripture.push(crate::scripture::genesis(
-        &culture.name,
-        &place,
-        eden as u32,
-    ));
-    world.languages.push(crate::language::Language::root(
-        culture.id,
-        culture.name_seed,
-        culture.phonemes.clone(),
-    ));
-    world.cultures.push(culture);
-    world.split_watch.push(0);
-}
 
 /// Logistic growth toward carrying capacity. Never overshoots.
 pub fn tick_population(world: &mut World) {

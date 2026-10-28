@@ -116,12 +116,12 @@ fn main() -> ExitCode {
 /// Casts a power `casts` times, each aimed at wherever the most people live,
 /// the way a player would: smiting a graveyard tells you nothing about belief.
 fn run_casts(world: &mut World, index: i64, casts: u32, after: u32) {
-    let eden = world.eden_tile().expect("Eden exists");
+    let garden = world.garden_tile().expect("the Garden exists");
     let power = sim_core::powers::Power::from_index(index);
     for _ in 0..casts {
         let target = (0..world.population.len())
             .max_by(|&a, &b| world.population[a].total_cmp(&world.population[b]))
-            .unwrap_or(eden);
+            .unwrap_or(garden);
         world.queue_power(power, target % GRID_WIDTH, target / GRID_WIDTH);
         world.step(after);
     }

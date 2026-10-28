@@ -13,8 +13,10 @@ use sim_core::powers::Power;
 use sim_core::world::{GRID_WIDTH, World};
 use sim_core::worldgen::Biome;
 
-fn eden(world: &World) -> (usize, usize) {
-    let tile = world.eden_tile().expect("Eden exists");
+fn home(world: &World) -> (usize, usize) {
+    let tile = world
+        .line_home(sim_core::culture::Line::Dirt)
+        .expect("Dirt is planted");
     (tile % GRID_WIDTH, tile / GRID_WIDTH)
 }
 
@@ -27,8 +29,8 @@ fn populated_tiles(world: &World) -> Vec<usize> {
 #[test]
 fn a_queued_power_applies_at_the_start_of_the_next_tick() {
     let mut world = World::new(1);
-    let (x, y) = eden(&world);
-    let before = world.population[eden(&world).1 * GRID_WIDTH + eden(&world).0];
+    let (x, y) = home(&world);
+    let before = world.population[home(&world).1 * GRID_WIDTH + home(&world).0];
 
     world.queue_power(Power::Meteor, x, y);
     assert_eq!(
@@ -47,7 +49,7 @@ fn a_queued_power_applies_at_the_start_of_the_next_tick() {
 #[test]
 fn the_action_log_records_the_tick_the_power_and_the_tile() {
     let mut world = World::new(1);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     world.queue_power(Power::Meteor, x, y);
     world.step(1);
 
@@ -67,7 +69,7 @@ fn the_action_log_records_the_tick_the_power_and_the_tile() {
 fn a_meteor_kills_most_people_under_it() {
     let mut world = World::new(1);
     world.step(200);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
     let before = world.population[tile];
 
@@ -88,7 +90,7 @@ fn a_meteor_promotes_two_witnesses_and_writes_a_verse() {
     let settled = populated_tiles(&world);
     assert!(settled.len() > 3, "the world has people to witness");
 
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     world.queue_power(Power::Meteor, x, y);
     world.step(1);
 
@@ -143,7 +145,7 @@ fn verse_count(world: &World) -> usize {
 fn a_witnessed_meteor_turns_the_witness_wrathful() {
     let mut world = World::new(1);
     world.step(300);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
     let before = world.belief_of(tile);
 
@@ -164,7 +166,7 @@ fn a_witnessed_meteor_turns_the_witness_wrathful() {
 fn a_blessing_raises_capacity_and_expires_after_ten_years() {
     let mut world = World::new(1);
     world.step(100);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
     let before = world.carrying_capacity[tile];
 
@@ -186,7 +188,7 @@ fn a_blessing_raises_capacity_and_expires_after_ten_years() {
 #[test]
 fn raising_land_makes_a_tile_hold_more_people() {
     let mut world = World::new(1);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
     let before = world.carrying_capacity[tile];
     let elevation = world.elevation[tile];
@@ -201,7 +203,7 @@ fn raising_land_makes_a_tile_hold_more_people() {
 #[test]
 fn painting_a_biome_changes_what_the_tile_can_carry() {
     let mut world = World::new(1);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
 
     world.queue_power(Power::Paint(Biome::Desert), x, y);
@@ -219,7 +221,7 @@ fn painting_a_biome_changes_what_the_tile_can_carry() {
 fn a_tornado_kills_people_without_reshaping_the_land() {
     let mut world = World::new(1);
     world.step(300);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
     let before = world.population[tile];
     let elevation = world.elevation[tile];
@@ -237,7 +239,7 @@ fn a_tornado_kills_people_without_reshaping_the_land() {
 fn spawned_beasts_hunt_the_local_people() {
     let mut world = World::new(1);
     world.step(300);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let tile = y * GRID_WIDTH + x;
     let before = world.population[tile];
 
@@ -255,7 +257,7 @@ fn spawned_beasts_hunt_the_local_people() {
 fn witnesses_come_from_the_most_populous_affected_tile() {
     let mut world = World::new(1);
     world.step(200);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     let footprint = sim_core::powers::tiles_around(x, y, 1);
     // Read the population before the tick: the witness is chosen from the
     // world as it was when the power landed.
@@ -279,7 +281,7 @@ fn witnesses_come_from_the_most_populous_affected_tile() {
 fn a_chosen_witness_is_preferred_when_both_peoples_are_watching() {
     let mut world = World::new(1);
     world.step(200);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     world.queue_power(Power::Bless, x, y);
     world.step(1);
 
@@ -287,7 +289,7 @@ fn a_chosen_witness_is_preferred_when_both_peoples_are_watching() {
     assert_eq!(
         world.cultures()[witness.culture_id as usize].favor,
         sim_core::culture::Favor::Chosen,
-        "Eden's people are the Chosen, so theirs is the witness"
+        "Dirt's people are the Chosen, so theirs is the witness"
     );
 }
 
@@ -323,7 +325,7 @@ fn names_are_deterministic_and_differ_between_peoples() {
 fn the_witness_budget_is_bounded_and_old_witnesses_become_legends() {
     let mut world = World::new(1);
     world.step(300);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
 
     for _ in 0..400 {
         world.queue_power(Power::Bless, x, y);
@@ -345,7 +347,7 @@ fn the_witness_budget_is_bounded_and_old_witnesses_become_legends() {
 fn scripture_reads_newest_first_and_names_its_witness() {
     let mut world = World::new(1);
     world.step(300);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     world.queue_power(Power::Meteor, x, y);
     world.step(10);
 
@@ -369,7 +371,7 @@ fn the_same_seed_and_the_same_actions_write_the_same_scripture() {
     a.step(200);
     b.step(200);
 
-    let (x, y) = eden(&a);
+    let (x, y) = home(&a);
     for world in [&mut a, &mut b] {
         world.queue_power(Power::Meteor, x, y);
         world.queue_power(Power::Bless, x, y);
@@ -395,7 +397,7 @@ fn the_same_seed_and_the_same_actions_write_the_same_scripture() {
 fn scripture_survives_a_split_into_the_daughter_people() {
     let mut world = World::new(1);
     world.step(300);
-    let (x, y) = eden(&world);
+    let (x, y) = home(&world);
     world.queue_power(Power::Meteor, x, y);
     world.step(1_800);
 

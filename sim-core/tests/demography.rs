@@ -1,5 +1,5 @@
 //! Demography and culture contracts for Milestone 1 (design, Milestones ->
-//! Living Map): Eden, growth toward carrying capacity, crowding-driven
+//! Living Map): the Garden, growth toward carrying capacity, crowding-driven
 //! migration, culture drift/blending, and the split rule.
 //!
 //! These tests are the Milestone 1 "done when" gate in executable form: a
@@ -25,30 +25,40 @@ fn settled_tiles(world: &World) -> Vec<usize> {
 }
 
 #[test]
-fn eden_spawns_exactly_one_settlement_on_habitable_land() {
+fn the_garden_plants_one_tile_per_line_on_habitable_land() {
     let world = World::new(1);
     let settled = settled_tiles(&world);
-    assert_eq!(settled.len(), 1, "humanity starts at a single origin");
-
-    let eden = settled[0];
-    assert!(
-        world.carrying_capacity[eden] > 0.0,
-        "Eden must sit on land that can carry people"
+    assert_eq!(
+        settled.len(),
+        2,
+        "humanity starts at a single origin, as two lines"
     );
-    assert_eq!(world.culture_id[eden], world.eden_culture_id());
-    assert_eq!(world.cultures().len(), 1);
+
+    for (id, &tile) in settled.iter().enumerate() {
+        assert!(
+            world.carrying_capacity[tile] > 0.0,
+            "each line must sit on land that can carry people"
+        );
+        assert_ne!(world.culture_id[tile], NO_CULTURE);
+        assert_eq!(
+            world.line_home(world.cultures()[world.culture_id[tile] as usize].line),
+            Some(tile),
+            "line {id}"
+        );
+    }
+    assert_eq!(world.cultures().len(), 2);
     assert_eq!(world.cultures()[0].favor, Favor::Chosen);
 }
 
 #[test]
 fn population_grows_toward_capacity_and_never_passes_it() {
     let mut world = World::new(1);
-    let eden = settled_tiles(&world)[0];
-    let start = world.population[eden];
-    let capacity = world.carrying_capacity[eden];
+    let home = settled_tiles(&world)[0];
+    let start = world.population[home];
+    let capacity = world.carrying_capacity[home];
 
     world.step(300);
-    let later = world.population[eden];
+    let later = world.population[home];
     assert!(later > start, "population grows toward carrying capacity");
     assert!(
         later <= capacity + 1e-3,
@@ -82,8 +92,8 @@ fn crowding_drives_migration_onto_new_land() {
     let mut world = World::new(1);
     world.step(400);
     assert!(
-        settled_tiles(&world).len() > 1,
-        "a crowded Eden spills onto neighboring tiles"
+        settled_tiles(&world).len() > 2,
+        "crowded homes spill onto neighboring tiles beyond the two lines' first"
     );
 }
 
@@ -92,28 +102,29 @@ fn a_newly_settled_tile_inherits_its_source_culture() {
     let mut world = World::new(1);
     world.step(1_000);
     let settled = settled_tiles(&world);
-    assert!(settled.len() > 1);
+    assert!(settled.len() > 2);
 
     let mut homelands = 0;
     for &i in &settled {
         let id = world.culture_id[i];
         assert_ne!(id, NO_CULTURE, "a populated tile always carries a culture");
-        // Every Milestone 1 people descends from the root culture (id 0), so a
-        // culture is either the root or has a parent.
+        // Every people descends from one of the two founding lines (ids 0
+        // and 1, Out of the Garden), so a culture is a line's root or has a
+        // parent.
         let culture = &world.cultures()[id as usize];
         assert!(
-            culture.id == 0 || culture.parent_id.is_some(),
+            usize::from(culture.id) < culture::LINES || culture.parent_id.is_some(),
             "tile {i} carries an orphan culture"
         );
-        if id == 0 {
+        if usize::from(id) < culture::LINES {
             homelands += 1;
         }
     }
-    assert!(homelands > 0, "the homeland keeps its culture");
+    assert!(homelands > 0, "the homelands keep their cultures");
 }
 
 #[test]
-fn culture_vectors_drift_away_from_eden_over_time() {
+fn culture_vectors_drift_away_from_the_garden_over_time() {
     let mut world = World::new(1);
     let origin = world.culture_vec_of(settled_tiles(&world)[0]);
 
@@ -221,8 +232,12 @@ fn two_thousand_years_yields_three_or_more_peoples() {
 #[test]
 fn split_components_are_measured_over_settled_tiles_only() {
     let world = World::new(1);
-    let components = culture::components(&world, world.eden_culture_id());
-    assert_eq!(components.len(), 1, "Eden is one connected settlement");
+    let components = culture::components(&world, world.cultures()[0].id);
+    assert_eq!(
+        components.len(),
+        1,
+        "Dirt's first home is one connected settlement"
+    );
     assert_eq!(components[0].len(), 1);
 }
 
@@ -232,7 +247,7 @@ fn culture_overlay_lights_settled_tiles_and_desaturates_the_rest() {
     let overlay = world.paint_overlay(Overlay::Culture);
     assert_eq!(overlay.len(), tiles() * 4);
 
-    let eden = settled_tiles(&world)[0];
+    let home = settled_tiles(&world)[0];
     let unsettled_land = (0..tiles())
         .find(|&i| {
             world.biome[i] != Biome::Ocean
@@ -241,9 +256,12 @@ fn culture_overlay_lights_settled_tiles_and_desaturates_the_rest() {
         })
         .expect("the map has unsettled land");
 
-    let settled_px = &overlay[eden * 4..eden * 4 + 3];
+    let settled_px = &overlay[home * 4..home * 4 + 3];
     let unsettled_px = &overlay[unsettled_land * 4..unsettled_land * 4 + 3];
-    assert_ne!(settled_px, unsettled_px, "Eden is lit, the frontier is not");
+    assert_ne!(
+        settled_px, unsettled_px,
+        "the first home is lit, the frontier is not"
+    );
 
     let spread = |px: &[u8]| {
         let max = i32::from(*px.iter().max().unwrap());

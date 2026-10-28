@@ -97,8 +97,11 @@ pub struct World {
     /// Split hysteresis: consecutive checks each culture had a qualifying
     /// candidate. A people that keeps producing candidates splits.
     pub(crate) split_watch: Vec<u8>,
-    /// Tile humanity started on (design, Eden).
-    pub(crate) eden: Option<u32>,
+    /// The Garden: the best land, where humanity began and nobody stays
+    /// (design, Out of the Garden step 1).
+    pub(crate) garden: Option<u32>,
+    /// Where each line was planted beside the Garden, indexed by `Line`.
+    pub(crate) line_homes: [Option<u32>; culture::LINES],
     /// Demography's own RNG stream, derived from the world seed (design:
     /// every system gets its own seeded RNG).
     pub(crate) rng: Pcg64,
@@ -144,7 +147,8 @@ pub struct World {
 }
 
 impl World {
-    /// Generates a new world from `seed`, then plants Eden.
+    /// Generates a new world from `seed`, then plants the two lines beside the
+    /// Garden.
     pub fn new(seed: u64) -> Self {
         let GeneratedWorld {
             elevation,
@@ -170,7 +174,8 @@ impl World {
             culture_vec: vec![0.0; tiles * culture::DIMS],
             cultures: Vec::new(),
             split_watch: Vec::new(),
-            eden: None,
+            garden: None,
+            line_homes: [None; culture::LINES],
             rng: Pcg64::seed_from_u64(seed ^ 0xD3A0_6D3D_0000_0001),
             base_capacity,
             blessed_until: vec![0; tiles],
@@ -192,7 +197,7 @@ impl World {
             tile_polity: vec![u16::MAX; GRID_WIDTH * GRID_HEIGHT],
             settlement_of: vec![u32::MAX; GRID_WIDTH * GRID_HEIGHT],
         };
-        demography::plant_eden(&mut world);
+        crate::garden::plant(&mut world);
         world.faiths.push(Faith {
             id: 0,
             founded_tick: 0,
@@ -221,17 +226,14 @@ impl World {
         &self.cultures
     }
 
-    /// Culture id of the people humanity started as.
-    pub fn eden_culture_id(&self) -> u16 {
-        match self.eden {
-            Some(tile) => self.culture_id[tile as usize],
-            None => NO_CULTURE,
-        }
+    /// The Garden's tile, where humanity began.
+    pub fn garden_tile(&self) -> Option<usize> {
+        self.garden.map(|tile| tile as usize)
     }
 
-    /// The tile Eden was planted on.
-    pub fn eden_tile(&self) -> Option<usize> {
-        self.eden.map(|tile| tile as usize)
+    /// The tile a line was planted on beside the Garden.
+    pub fn line_home(&self, line: culture::Line) -> Option<usize> {
+        self.line_homes[line as usize].map(|tile| tile as usize)
     }
 
     /// Copy of one tile's culture vector.
@@ -827,10 +829,11 @@ mod tests {
         }
     }
 
+    /// A tile the Chosen live on: witnesses are theirs (design, Witness rule).
     fn settled_tile(world: &World) -> usize {
         (0..world.population.len())
-            .find(|&i| world.population[i] >= 1.0 && world.culture_id[i] != NO_CULTURE)
-            .expect("a settled tile")
+            .find(|&i| world.population[i] >= 1.0 && world.is_chosen(world.culture_id[i]))
+            .expect("a settled tile of the Chosen")
     }
 
     fn is_legend(world: &World, id: u32) -> bool {
@@ -879,6 +882,8 @@ mod tests {
     fn the_global_cap_takes_witnesses_before_other_notables() {
         let mut world = World::new(1);
         world.step(200);
+        // The stuffing below fills the cap exactly, so start from no notables.
+        world.notables.clear();
         // 2,000 individuals: 250 witnesses (under their own budget) and 1,750
         // prophets of a stranger people, one of them dimmer than any witness.
         for id in 0..250 {
@@ -967,6 +972,8 @@ mod tests {
     fn with_no_witness_left_the_global_cap_takes_the_dimmest_other_notable() {
         let mut world = World::new(1);
         world.step(200);
+        // The stuffing below fills the cap exactly, so start from no notables.
+        world.notables.clear();
         for id in 0..2_000 {
             let salience = if id == 1_234 { 0.1 } else { 10.0 };
             world.notables.push(stuffed(id, Role::Prophet, salience));

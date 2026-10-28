@@ -52,8 +52,14 @@ fn isolated_tongues_drift_faster() {
 
     // Words drifted per language, and isolation: how far each tongue's people
     // live from the nearest people who speak something else.
-    let drift =
-        |world: &World, lang: u16| -> u32 { world.languages()[lang as usize].words_drifted() };
+    // Drift per year of the tongue's life: the design claims a faster rate,
+    // and with two founding tongues an old crowded tongue can out-total a
+    // young isolated one (Out of the Garden).
+    let drift = |world: &World, lang: u16| -> f32 {
+        let language = &world.languages()[lang as usize];
+        let born = world.cultures()[language.speaker_id as usize].founded_tick;
+        language.words_drifted() as f32 / (world.tick() - born).max(1) as f32
+    };
     let isolation = |world: &World, culture_id: u16| -> f32 {
         let home = world.cultures()[culture_id as usize].place;
         let mut nearest = f32::MAX;
@@ -86,7 +92,7 @@ fn isolated_tongues_drift_faster() {
     );
     assert!(
         drift(&world, drifted.1) > drift(&world, close.1),
-        "words drift faster in isolation ({} vs {})",
+        "words drift faster in isolation ({} vs {} a year)",
         drift(&world, drifted.1),
         drift(&world, close.1)
     );

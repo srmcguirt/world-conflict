@@ -108,8 +108,8 @@ fn a_new_doctrine_elevates_a_prophet_who_speaks_for_the_god() {
     let culture = world.cultures()[0].id;
 
     // Smite them once so somebody is a witness to elevate.
-    let eden = world.eden_tile().unwrap();
-    world.queue_power(sim_core::powers::Power::Meteor, eden % 160, eden / 160);
+    let home = world.line_home(sim_core::culture::Line::Dirt).unwrap();
+    world.queue_power(sim_core::powers::Power::Meteor, home % 160, home / 160);
     world.step(10);
     assert!(!world.witnesses().is_empty(), "the meteor made witnesses");
 
@@ -119,7 +119,11 @@ fn a_new_doctrine_elevates_a_prophet_who_speaks_for_the_god() {
     let prophets: Vec<_> = world
         .notables()
         .iter()
-        .filter(|notable| notable.role == sim_core::notables::Role::Prophet)
+        // The snake's line forms its own doctrine and prophet; count this
+        // people's.
+        .filter(|notable| {
+            notable.role == sim_core::notables::Role::Prophet && notable.culture_id == culture
+        })
         .collect();
     assert_eq!(prophets.len(), 1, "one prophet speaks for the god");
     assert_eq!(prophets[0].culture_id, culture);
@@ -136,8 +140,8 @@ fn a_prophet_is_not_demoted_like_a_witness() {
     let mut world = World::new(1);
     world.step(50);
     let culture = world.cultures()[0].id;
-    let eden = world.eden_tile().unwrap();
-    world.queue_power(sim_core::powers::Power::Meteor, eden % 160, eden / 160);
+    let home = world.line_home(sim_core::culture::Line::Dirt).unwrap();
+    world.queue_power(sim_core::powers::Power::Meteor, home % 160, home / 160);
     world.step(10);
 
     set_culture_belief(&mut world, culture, angry());
@@ -145,7 +149,11 @@ fn a_prophet_is_not_demoted_like_a_witness() {
     let prophets = world
         .notables()
         .iter()
-        .filter(|notable| notable.role == sim_core::notables::Role::Prophet)
+        // The snake's line forms its own doctrine and prophet; count this
+        // people's.
+        .filter(|notable| {
+            notable.role == sim_core::notables::Role::Prophet && notable.culture_id == culture
+        })
         .count();
     assert_eq!(prophets, 1);
 
@@ -153,7 +161,11 @@ fn a_prophet_is_not_demoted_like_a_witness() {
     let prophets = world
         .notables()
         .iter()
-        .filter(|notable| notable.role == sim_core::notables::Role::Prophet)
+        // The snake's line forms its own doctrine and prophet; count this
+        // people's.
+        .filter(|notable| {
+            notable.role == sim_core::notables::Role::Prophet && notable.culture_id == culture
+        })
         .count();
     assert_eq!(prophets, 1, "prophets keep their office");
 }
@@ -301,8 +313,8 @@ fn the_same_seed_and_actions_produce_the_same_faiths() {
     let mut b = World::new(5);
     for world in [&mut a, &mut b] {
         world.step(400);
-        let eden = world.eden_tile().unwrap();
-        world.queue_power(sim_core::powers::Power::Meteor, eden % 160, eden / 160);
+        let home = world.line_home(sim_core::culture::Line::Dirt).unwrap();
+        world.queue_power(sim_core::powers::Power::Meteor, home % 160, home / 160);
         world.step(400);
     }
 

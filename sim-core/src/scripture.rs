@@ -33,6 +33,28 @@ pub enum VerseKind {
     Protest,
     /// A riot in the largest settlement.
     Riot,
+    /// What a line brought the god at the founding (design, Out of the
+    /// Garden step 1; D18).
+    Offering(Offering),
+    /// How the two lines went out of the Garden, told by one of them.
+    /// `high_ground` is the snake's line's telling.
+    Parting { high_ground: bool },
+}
+
+/// What a line offered at the founding: Dirt the first of its harvest, the
+/// snake's line the work of its hands (D18).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Offering {
+    Harvest(Harvest),
+    Handiwork,
+}
+
+/// The first of the harvest, by the land Dirt worked.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Harvest {
+    Grain,
+    Fruit,
+    Fish,
 }
 
 /// One line of holy text.
@@ -47,7 +69,7 @@ pub struct Verse {
     /// same event in her own words (design: drifting copies).
     pub place_tile: u32,
     pub people: String,
-    /// The other people in an anointing; empty otherwise.
+    /// The other people in an anointing or the parting; empty otherwise.
     pub other: String,
     pub witness_id: Option<u32>,
     /// How far this copy has drifted from the original (language, Milestone 5).
@@ -85,6 +107,13 @@ impl Verse {
             VerseKind::Riot => {
                 "In year {year} the market at {place} was burned, and two in ten of the quarter are gone."
             }
+            VerseKind::Offering(offering) => offering_line(offering),
+            VerseKind::Parting { high_ground: false } => {
+                "In the first year {people} went out of {place} with its dust on their hands, and {other} went up to the high places to build; {people} went down to work the ground."
+            }
+            VerseKind::Parting { high_ground: true } => {
+                "In the first year {people} went out of {place} and would not wander. They went up to the high places to build with their own hands, and left {other} to dig."
+            }
         };
         text.replace("{year}", &self.tick.to_string())
             .replace("{witness}", witness)
@@ -92,6 +121,24 @@ impl Verse {
             .replace("{people}", &people)
             .replace("{other}", &other)
             .replace("{god}", crate::names::GOD_NAME)
+    }
+}
+
+/// A line's offering at the founding.
+fn offering_line(offering: Offering) -> &'static str {
+    match offering {
+        Offering::Harvest(Harvest::Grain) => {
+            "At {place} {people} broke the ground and brought {god} the first of the grain."
+        }
+        Offering::Harvest(Harvest::Fruit) => {
+            "At {place} {people} gathered from the trees and brought {god} the first of the fruit."
+        }
+        Offering::Harvest(Harvest::Fish) => {
+            "At {place} {people} cast nets in the shallows and brought {god} the first of the fish."
+        }
+        Offering::Handiwork => {
+            "At {place} {people} cut stone and raised a wall, and brought {god} the work of their hands."
+        }
     }
 }
 
@@ -189,17 +236,19 @@ fn templates(power: Power, polarity: Polarity) -> &'static [&'static str] {
     }
 }
 
-/// The verse that opens every scripture, at Eden (design, Interaction states).
-pub fn genesis(people: &str, place: &str, tile: u32) -> Verse {
+/// A founding verse at year 0: the opening at the Garden, an offering, or the
+/// parting (design, Interaction states; Out of the Garden step 1). `other` is
+/// the other line's name.
+pub fn founding_verse(kind: VerseKind, people: &str, other: &str, place: &str, tile: u32) -> Verse {
     Verse {
         place_tile: tile,
         tick: 0,
-        kind: VerseKind::Genesis,
+        kind,
         polarity: Polarity::Mercy,
         witness: "the first people".to_string(),
         place: place.to_string(),
         people: people.to_string(),
-        other: String::new(),
+        other: other.to_string(),
         witness_id: None,
         mutation: 0,
     }
@@ -242,7 +291,7 @@ mod tests {
 
     #[test]
     fn the_opening_verse_reads_as_a_beginning() {
-        let text = genesis("Karethi", "Suran", 17).render();
+        let text = founding_verse(VerseKind::Genesis, "Karethi", "", "Suran", 17).render();
         assert!(text.starts_with("In the beginning"), "{text}");
         assert!(text.contains("Suran"));
         assert!(text.contains("the Karethi"));

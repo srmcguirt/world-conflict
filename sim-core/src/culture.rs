@@ -35,6 +35,22 @@ pub enum Favor {
     Other,
 }
 
+/// Which of the first family's two lines a people descends from (design,
+/// Out of the Garden; D4). Set at the founding and inherited unchanged at
+/// every split.
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Line {
+    /// Adam's line, named for the ground it works. Starts Chosen.
+    Dirt,
+    /// The line of the snake, which refuses to wander and builds.
+    Snake,
+}
+
+/// How many lines the first family yields; arrays indexed by `Line as usize`.
+pub const LINES: usize = 2;
+
 /// A settled distance between two culture vectors (Euclidean over [`DIMS`]).
 pub fn distance(a: &[f32; DIMS], b: &[f32; DIMS]) -> f32 {
     let mut sum = 0.0;
@@ -58,6 +74,8 @@ pub struct Culture {
     pub name_seed: u64,
     pub centroid: [f32; DIMS],
     pub favor: Favor,
+    /// The line this people descends from (design, Out of the Garden; D4).
+    pub line: Line,
     /// Cached aggregates, refreshed every 10 ticks (design: aggregates).
     pub population: f32,
     pub tiles: u32,
@@ -99,7 +117,7 @@ impl Culture {
     /// Founds the first people: its own name, its own sound, an opening verse.
     pub fn found(
         id: u16,
-        founded_tick: u64,
+        line: Line,
         name_seed: u64,
         centroid: [f32; DIMS],
         favor: Favor,
@@ -109,10 +127,11 @@ impl Culture {
         let mut culture = Self {
             id,
             parent_id: None,
-            founded_tick,
+            founded_tick: 0,
             name_seed,
             centroid,
             favor,
+            line,
             population,
             tiles,
             name: String::new(),
@@ -159,6 +178,7 @@ impl Culture {
             name_seed,
             centroid,
             favor,
+            line: parent.line,
             population,
             tiles,
             name: String::new(),
