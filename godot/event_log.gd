@@ -88,7 +88,11 @@ func add_events(events: Array, dropped: int) -> void:
 		# A year's finished buildings fold into one line, so building never
 		# crowds the people's verses out of the feed.
 		var last: Dictionary = _events.back() if not _events.is_empty() else {}
-		if event["kind"] == "building" and last.get("kind") == "building" and last["tick"] == event["tick"]:
+		if (
+			event["kind"] == "building"
+			and last.get("kind") == "building"
+			and last["tick"] == event["tick"]
+		):
 			last["count"] += 1
 			last["text"] = "%d buildings finished, among them %s" % [last["count"], last["first"]]
 			continue

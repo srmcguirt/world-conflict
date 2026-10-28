@@ -52,7 +52,12 @@ func show_polity(card: Dictionary, unrest: Array) -> void:
 			UiTheme.muted(
 				(
 					"the %s · %s · %d settlements · legitimacy from %s"
-					% [card["people"], card["government"], card["settlements"], card["legitimacy_source"]]
+					% [
+						card["people"],
+						card["government"],
+						card["settlements"],
+						card["legitimacy_source"]
+					]
 				),
 				13
 			)
@@ -67,7 +72,11 @@ func show_polity(card: Dictionary, unrest: Array) -> void:
 
 	if not card["visible"]:
 		_column.add_child(
-			_left(UiTheme.muted("Their meters are hidden. A witness among them would let you see.", 13))
+			_left(
+				UiTheme.muted(
+					"Their meters are hidden. A witness among them would let you see.", 13
+				)
+			)
 		)
 		return
 	for meter in METERS:

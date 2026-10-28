@@ -258,7 +258,9 @@ func _layout_hud() -> void:
 				c.size = Vector2(minf(view.x / s - 24.0, 900.0), size.y)
 				c.position = Vector2((view.x - c.size.x * s) * 0.5, view.y - log_h - 8.0)
 			"tools":
-				c.position = Vector2((view.x - size.x * s) * 0.5, view.y - log_h - size.y * s - 16.0)
+				c.position = Vector2(
+					(view.x - size.x * s) * 0.5, view.y - log_h - size.y * s - 16.0
+				)
 			"selection":
 				c.size = size
 				c.position = Vector2(12, 52 * s)
@@ -389,7 +391,9 @@ func _refresh_settlements() -> void:
 		_view_keys[tile] = key
 		if not _views.has(tile):
 			_views[tile] = _new_view(settlement_layer, tile)
-			_ghost_views[tile] = [_new_view(_ghost_layers[0], tile), _new_view(_ghost_layers[1], tile)]
+			_ghost_views[tile] = [
+				_new_view(_ghost_layers[0], tile), _new_view(_ghost_layers[1], tile)
+			]
 		for view in [_views[tile]] + _ghost_views[tile]:
 			view.configure(
 				tile,
@@ -585,7 +589,13 @@ func _select_tile(tile: Vector2i) -> void:
 		if card.size() >= 6:
 			_selection_label.text = (
 				"%s of the %s\n%d people · %d of %d buildings"
-				% [TIERS[clampi(card[1], 0, 3)], sim.culture_name(card[2]), card[4], card[3], card[5]]
+				% [
+					TIERS[clampi(card[1], 0, 3)],
+					sim.culture_name(card[2]),
+					card[4],
+					card[3],
+					card[5]
+				]
 			)
 			_shown_polity = sim.polity_at_tile(card[0] % grid_w, card[0] / grid_w)
 			_kingdom_row.visible = _shown_polity >= 0

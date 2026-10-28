@@ -56,12 +56,18 @@ func show_title() -> void:
 	_leave_world()
 	var newest := SaveStore.newest()
 	var saved: Dictionary = newest.get("header", {})
-	_show(MenuScreens.title(show_new_world, _continue, saved, _open_settings.bind(show_title), _quit))
+	_show(
+		MenuScreens.title(show_new_world, _continue, saved, _open_settings.bind(show_title), _quit)
+	)
 
 
 func show_new_world() -> void:
 	_leave_world()
-	_show(MenuScreens.new_world(func(seed_value: int) -> void: start_world.call(seed_value, 0), show_title))
+	_show(
+		MenuScreens.new_world(
+			func(seed_value: int) -> void: start_world.call(seed_value, 0), show_title
+		)
+	)
 
 
 func _open_settings(back: Callable) -> void:
@@ -86,23 +92,28 @@ func _open_menu() -> void:
 # Back from settings into the Esc menu keeps the paused state it saved.
 func _open_menu_again(note: String = "") -> void:
 	_show(
-		MenuScreens.pause_menu(
-			{
-				"Resume": _resume,
-				"Save": _save_now,
-				"Settings": _open_settings.bind(_open_menu_again.bind("")),
-				"New world": show_new_world,
-				"Main menu": show_title,
-				"Quit": _quit,
-			},
-			note
+		(
+			MenuScreens
+			. pause_menu(
+				{
+					"Resume": _resume,
+					"Save": _save_now,
+					"Settings": _open_settings.bind(_open_menu_again.bind("")),
+					"New world": show_new_world,
+					"Main menu": show_title,
+					"Quit": _quit,
+				},
+				note
+			)
 		)
 	)
 
 
 func _save_now() -> void:
 	var saved := SaveStore.save_world(game.sim)
-	_open_menu_again("Saved at year %d" % game.sim.tick() if saved else "The world could not be saved")
+	_open_menu_again(
+		"Saved at year %d" % game.sim.tick() if saved else "The world could not be saved"
+	)
 
 
 func _resume() -> void:

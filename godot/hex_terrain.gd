@@ -55,10 +55,20 @@ const REACH := 4
 # Odd-r neighbor offsets on the six sides E, SE, SW, W, NW, NE, for even rows
 # and odd rows (sim-core hex.rs).
 const EVEN_SIDES := [
-	Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1), Vector2i(0, -1)
+	Vector2i(1, 0),
+	Vector2i(0, 1),
+	Vector2i(-1, 1),
+	Vector2i(-1, 0),
+	Vector2i(-1, -1),
+	Vector2i(0, -1)
 ]
 const ODD_SIDES := [
-	Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, -1)
+	Vector2i(1, 0),
+	Vector2i(1, 1),
+	Vector2i(0, 1),
+	Vector2i(-1, 0),
+	Vector2i(0, -1),
+	Vector2i(1, -1)
 ]
 
 var grid_w := 0
@@ -66,13 +76,19 @@ var grid_h := 0
 var steps := PackedInt32Array()  # terrace per tile; -1 for water below the shore
 var corner_lift := PackedFloat32Array()  # 6 per tile: each top corner's height in px
 var center_lift := PackedFloat32Array()  # per tile: the center's height, a peak on mountains
-var mid_lift := PackedFloat32Array()  # 6 per tile: each side's midpoint height, a ridge between mountains
+# 6 per tile: each side's midpoint height, a ridge between mountains
+var mid_lift := PackedFloat32Array()
 var _biomes := PackedByteArray()
 var _heights := PackedFloat32Array()
 var _material: ShaderMaterial
 var _bands: Array[MeshInstance2D] = []
 var _ghosts: Array[MeshInstance2D] = []  # each band's copies one world west and east
 var _pending: Array[int] = []  # bands still to build during loading
+# Packed arrays straight into an ArrayMesh: much cheaper than SurfaceTool,
+# which builds a vertex object per add_vertex call.
+var _verts := PackedVector2Array()
+var _colors := PackedColorArray()
+var _uvs := PackedVector2Array()
 
 
 func setup(width: int, height: int, color_tex: Texture2D, code_tex: Texture2D) -> void:
@@ -282,8 +298,7 @@ func _raise_peaks(tiles) -> void:
 		center_lift[i] = step_height(steps[i]) + peak
 		for side in 6:
 			var edge := (
-				(corner_lift[i * 6 + (side + 1) % 6] + corner_lift[i * 6 + (side + 2) % 6])
-				* 0.5
+				(corner_lift[i * 6 + (side + 1) % 6] + corner_lift[i * 6 + (side + 2) % 6]) * 0.5
 			)
 			var n := neighbor(x, y, side)
 			if n.x >= 0 and peak > 0.0:
@@ -298,13 +313,6 @@ func _peak(i: int) -> float:
 	var roll := float((i * 2654435761) % 1000) / 1000.0
 	var altitude := float(steps[i]) / float(HEIGHT_STEPS)
 	return PEAK_PX * (0.55 + 0.45 * roll) * (0.6 + 0.6 * altitude)
-
-
-# Packed arrays straight into an ArrayMesh: much cheaper than SurfaceTool,
-# which builds a vertex object per add_vertex call.
-var _verts := PackedVector2Array()
-var _colors := PackedColorArray()
-var _uvs := PackedVector2Array()
 
 
 func _build_band(b: int) -> void:
@@ -355,7 +363,9 @@ func _emit_column(x: int, y: int) -> void:
 			var q: Vector2 = facet[2]
 			var hq: float = facet[3]
 			var light := 0.92 if water else _facet_light(p, q, hp - peak, hq - peak)
-			_vertex(_project(center, peak), uv, _top_color(light, Vector2.ZERO, peak, water, mountain))
+			_vertex(
+				_project(center, peak), uv, _top_color(light, Vector2.ZERO, peak, water, mountain)
+			)
 			_vertex(_project(center + p, hp), uv, _top_color(light, p, hp, water, mountain))
 			_vertex(_project(center + q, hq), uv, _top_color(light, q, hq, water, mountain))
 

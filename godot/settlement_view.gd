@@ -43,7 +43,13 @@ var _parts: Array[Dictionary] = []
 
 
 func configure(
-	tile: int, tier_in: int, biome: int, dress: Color, is_chosen: bool, has_faith: bool, n_built: int
+	tile: int,
+	tier_in: int,
+	biome: int,
+	dress: Color,
+	is_chosen: bool,
+	has_faith: bool,
+	n_built: int
 ) -> void:
 	tier = tier_in
 	seed_value = tile
@@ -67,9 +73,27 @@ func _layout() -> void:
 	# Houses face the hex's camera sides: yaw 30 degrees, like the columns.
 	var yaw := deg_to_rad(30.0)
 	if tier >= TIER_TOWN:
-		_parts.append({"kind": "tower", "at": Vector2.ZERO, "w": 3.2 * SIZE, "d": 3.2 * SIZE, "h": (9.0 + 2.0 * tier) * SIZE, "yaw": yaw})
+		_parts.append(
+			{
+				"kind": "tower",
+				"at": Vector2.ZERO,
+				"w": 3.2 * SIZE,
+				"d": 3.2 * SIZE,
+				"h": (9.0 + 2.0 * tier) * SIZE,
+				"yaw": yaw
+			}
+		)
 	if tier == TIER_CITY:
-		_parts.append({"kind": "tower", "at": Vector2(r * 0.55, -r * 0.35), "w": 2.6 * SIZE, "d": 2.6 * SIZE, "h": 11.0 * SIZE, "yaw": yaw})
+		_parts.append(
+			{
+				"kind": "tower",
+				"at": Vector2(r * 0.55, -r * 0.35),
+				"w": 2.6 * SIZE,
+				"d": 2.6 * SIZE,
+				"h": 11.0 * SIZE,
+				"yaw": yaw
+			}
+		)
 	var phase := rng.randf() * TAU
 	for i in houses:
 		# Sunflower spiral: even spacing without a grid look.
@@ -79,14 +103,19 @@ func _layout() -> void:
 		if tier >= TIER_TOWN and at.length() < 3.0 * SIZE:
 			continue
 		var w := (rng.randf_range(2.6, 3.6) + (0.6 if tier == TIER_CITY else 0.0)) * SIZE
-		_parts.append({
-			"kind": kind,
-			"at": at,
-			"w": w,
-			"d": w * rng.randf_range(0.7, 0.9),
-			"h": (rng.randf_range(2.6, 3.4) + (1.2 if tier == TIER_CITY else 0.0)) * SIZE,
-			"yaw": yaw + (0.0 if rng.randf() < 0.75 else PI / 2.0),
-		})
+		(
+			_parts
+			. append(
+				{
+					"kind": kind,
+					"at": at,
+					"w": w,
+					"d": w * rng.randf_range(0.7, 0.9),
+					"h": (rng.randf_range(2.6, 3.4) + (1.2 if tier == TIER_CITY else 0.0)) * SIZE,
+					"yaw": yaw + (0.0 if rng.randf() < 0.75 else PI / 2.0),
+				}
+			)
+		)
 	# Back to front: smaller plane y is farther from the camera.
 	_parts.sort_custom(func(a, b): return a["at"].y < b["at"].y)
 
@@ -201,12 +230,22 @@ func _draw_tent(part: Dictionary) -> void:
 	var r: float = part["w"] * 0.55
 	var apex := _p(at, part["h"] + 1.4)
 	draw_colored_polygon(
-		PackedVector2Array([_p(at + Vector2(-r, 0), 0.0), _p(at + Vector2(r, 0), 0.0), _p(at, 0.0) + Vector2(2.0, 1.0)]),
+		PackedVector2Array(
+			[
+				_p(at + Vector2(-r, 0), 0.0),
+				_p(at + Vector2(r, 0), 0.0),
+				_p(at, 0.0) + Vector2(2.0, 1.0)
+			]
+		),
 		Color(0, 0, 0, 0.25)
 	)
 	var hide := Color("#C9B48A").lerp(roof, 0.35)
-	var left := PackedVector2Array([_p(at + Vector2(-r, 0), 0.0), _p(at + Vector2(0, r), 0.0), apex])
-	var right := PackedVector2Array([_p(at + Vector2(0, r), 0.0), _p(at + Vector2(r, 0), 0.0), apex])
+	var left := PackedVector2Array(
+		[_p(at + Vector2(-r, 0), 0.0), _p(at + Vector2(0, r), 0.0), apex]
+	)
+	var right := PackedVector2Array(
+		[_p(at + Vector2(0, r), 0.0), _p(at + Vector2(r, 0), 0.0), apex]
+	)
 	draw_colored_polygon(left, _shade(hide, Vector3(-1, 1, 0.6)))
 	draw_colored_polygon(right, _shade(hide, Vector3(1, 1, 0.6)))
 	draw_line(_p(at + Vector2(0, r), 0.0), apex, INK.lerp(hide, 0.4), 0.5)

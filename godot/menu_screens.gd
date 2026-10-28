@@ -24,7 +24,11 @@ static func _card(ground: Color, width: float) -> Array:
 # `saved` is the newest save's header from Sim.save_header, or {} when there
 # is none; Continue opens it (design, Screen flow: Title; Load row).
 static func title(
-	on_new: Callable, on_continue: Callable, saved: Dictionary, on_settings: Callable, on_quit: Callable
+	on_new: Callable,
+	on_continue: Callable,
+	saved: Dictionary,
+	on_settings: Callable,
+	on_quit: Callable
 ) -> Control:
 	var parts := _card(UiTheme.INK, 320)
 	var column: VBoxContainer = parts[1]
@@ -65,7 +69,9 @@ static func notice(title_text: String, message: String, on_ok: Callable) -> Cont
 
 # The crash dialog (design, Interaction states: Crash dialog; R12): the world
 # broke mid-tick, so it can't continue; offer the newest autosave if any.
-static func crash(message: String, on_autosave: Callable, on_new: Callable, on_quit: Callable) -> Control:
+static func crash(
+	message: String, on_autosave: Callable, on_new: Callable, on_quit: Callable
+) -> Control:
 	var parts := _card(Color(UiTheme.INK, 0.92), 400)
 	var column: VBoxContainer = parts[1]
 	column.add_child(UiTheme.heading("The world broke", 28, UiTheme.DANGER))
@@ -126,7 +132,8 @@ static func new_world(on_begin: Callable, on_back: Callable) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var random := UiTheme.button(
-		"Random", func() -> void:
+		"Random",
+		func() -> void:
 			field.text = str(randi() % 1000000)
 			refresh.call()
 	)
