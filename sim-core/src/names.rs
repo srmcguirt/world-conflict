@@ -20,7 +20,7 @@ const VOWELS: [&str; 12] = [
 ];
 
 /// What a people's language sounds like.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Phonemes {
     consonants: Vec<String>,
     vowels: Vec<String>,

@@ -39,6 +39,71 @@ impl Sim {
         })
     }
 
+    /// The world as save-file bytes (design, Snapshot contents). Taken between
+    /// ticks, so a save always lands on a tick boundary (R12). A poisoned Sim
+    /// saves nothing: its world may be half-updated (R5).
+    #[func]
+    fn save_bytes(&self) -> PackedByteArray {
+        if self.poisoned {
+            return PackedByteArray::new();
+        }
+        PackedByteArray::from(sim_core::save::save(&self.world))
+    }
+
+    /// `GDScript` loader: `Sim.load_save(bytes)` returns `{sim, error}`, with
+    /// `sim` null and `error` the message to show when the save is refused.
+    #[func]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "GDScript hands #[func] arguments over by value"
+    )]
+    fn load_save(bytes: PackedByteArray) -> VarDictionary {
+        match sim_core::save::load(bytes.as_slice()) {
+            Ok((_, world)) => {
+                let sim = Gd::from_init_fn(|base| Self {
+                    world,
+                    poisoned: false,
+                    base,
+                });
+                vdict! { "sim" => &sim.to_variant(), "error" => &"".to_variant() }
+            }
+            Err(error) => vdict! {
+                "sim" => &Variant::nil(),
+                "error" => &error.to_string().to_variant(),
+            },
+        }
+    }
+
+    /// What a save holds, without loading it, for the Continue button:
+    /// `{ok, error, seed, year, can_replay}`. `can_replay` is false for a
+    /// save from another sim build (R11: it still loads).
+    #[func]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "GDScript hands #[func] arguments over by value"
+    )]
+    fn save_header(bytes: PackedByteArray) -> VarDictionary {
+        match sim_core::save::read_header(bytes.as_slice()) {
+            Ok(header) => vdict! {
+                "ok" => &true.to_variant(),
+                "error" => &"".to_variant(),
+                "seed" => &(header.seed as i64).to_variant(),
+                "year" => &(header.tick as i64).to_variant(),
+                "can_replay" => &sim_core::save::can_replay(&header).to_variant(),
+            },
+            Err(error) => vdict! {
+                "ok" => &false.to_variant(),
+                "error" => &error.to_string().to_variant(),
+            },
+        }
+    }
+
+    /// The world's seed, for the HUD and the save list.
+    #[func]
+    fn seed(&self) -> i64 {
+        self.world.seed() as i64
+    }
+
     /// True once a panic has poisoned the Sim; the UI shows the error dialog.
     #[func]
     fn is_poisoned(&self) -> bool {

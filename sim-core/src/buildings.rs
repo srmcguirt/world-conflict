@@ -71,14 +71,14 @@ impl BuildingCatalog {
 }
 
 /// A building slot's contents: which line, at which level.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Building {
     pub line: u8,
     pub level: u8,
 }
 
 /// What a settlement is currently building.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BuildJob {
     pub line: u8,
     pub target_level: u8,

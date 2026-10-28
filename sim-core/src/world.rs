@@ -68,7 +68,7 @@ impl Overlay {
 /// Rendering never writes here; the sim never reads rendering state. Fields are
 /// one `Vec` per tile attribute, row-major: index = y * `GRID_WIDTH` + x
 /// (design, Architecture -> `WorldState`).
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct World {
     /// World seed. Same seed + same actions => same history (design, Determinism).
     seed: u64,
@@ -331,6 +331,13 @@ impl World {
                 y: y.min(GRID_HEIGHT - 1),
             },
         });
+    }
+
+    /// Queues a recorded action log for replay: each action applies at the
+    /// tick it was logged at, in the order it was logged (design, Player
+    /// actions are queued).
+    pub fn queue_actions(&mut self, actions: &[Action]) {
+        self.queue.extend_from_slice(actions);
     }
 
     /// Queues an anointing of another people (design D11).
@@ -1032,7 +1039,7 @@ mod tests {
 }
 
 /// A beast that hunts the people of one tile for a while.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Beast {
     pub tile: usize,
     pub until: u64,

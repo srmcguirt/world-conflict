@@ -19,14 +19,14 @@ pub const WITNESS_TENURE: u64 = 20;
 
 /// What a notable is. Prophets arrive with belief (Milestone 3); heretics,
 /// heroes and rulers arrive with war and kingdoms.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Role {
     Witness,
     Prophet,
 }
 
 /// A named individual who saw something happen.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Notable {
     pub id: u32,
     pub culture_id: u16,
@@ -49,7 +49,7 @@ impl Notable {
 }
 
 /// A compact record of someone the scripture still cites.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Legend {
     pub id: u32,
     pub culture_id: u16,

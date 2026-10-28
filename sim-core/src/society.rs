@@ -6,7 +6,7 @@ use crate::hex;
 use crate::world::{GRID_WIDTH, World};
 
 /// A polity's government. M6a ships four; the rest arrive with M8.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Government {
     Band,
     Chiefdom,
@@ -26,7 +26,7 @@ impl Government {
 }
 
 /// A polity: a territory with a capital, a government and meters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Polity {
     pub id: u32,
     pub culture_id: u16,

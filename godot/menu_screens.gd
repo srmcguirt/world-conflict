@@ -21,22 +21,65 @@ static func _card(ground: Color, width: float) -> Array:
 	return [root, column]
 
 
-static func title(on_new: Callable, on_settings: Callable, on_quit: Callable) -> Control:
+# `saved` is the newest save's header from Sim.save_header, or {} when there
+# is none; Continue opens it (design, Screen flow: Title; Load row).
+static func title(
+	on_new: Callable, on_continue: Callable, saved: Dictionary, on_settings: Callable, on_quit: Callable
+) -> Control:
 	var parts := _card(UiTheme.INK, 320)
 	var column: VBoxContainer = parts[1]
 	column.add_child(UiTheme.heading("World Conflict", 44, UiTheme.GOLD))
 	column.add_child(UiTheme.muted("A god-game of a chosen people.", 16))
 	column.add_child(_gap(24))
+	var resume := UiTheme.button("Continue", on_continue)
 	var begin := UiTheme.button("New world", on_new)
-	column.add_child(begin)
-	var resume := UiTheme.button("Continue", func() -> void: pass)
-	resume.disabled = true
-	resume.tooltip_text = "No saved worlds yet"
+	var note := ""
+	if saved.is_empty():
+		resume.disabled = true
+		note = "No saved worlds yet"
+	elif saved["ok"]:
+		note = "year %d · seed %d" % [saved["year"], saved["seed"]]
+	else:
+		note = saved["error"]
 	column.add_child(resume)
-	column.add_child(UiTheme.muted("No saved worlds yet", 12))
+	column.add_child(UiTheme.muted(note, 12))
+	column.add_child(begin)
 	column.add_child(UiTheme.button("Settings", on_settings))
 	column.add_child(UiTheme.button("Quit", on_quit))
-	begin.call_deferred("grab_focus")
+	(begin if resume.disabled else resume).call_deferred("grab_focus")
+	return parts[0]
+
+
+# A message with one way out: the Load row's error state, and other refusals.
+static func notice(title_text: String, message: String, on_ok: Callable) -> Control:
+	var parts := _card(Color(UiTheme.INK, 0.9), 380)
+	var column: VBoxContainer = parts[1]
+	column.add_child(UiTheme.heading(title_text, 26))
+	column.add_child(UiTheme.muted(message, 15))
+	column.add_child(_gap(8))
+	var ok := UiTheme.button("OK", on_ok)
+	column.add_child(ok)
+	ok.call_deferred("grab_focus")
+	return parts[0]
+
+
+# The crash dialog (design, Interaction states: Crash dialog; R12): the world
+# broke mid-tick, so it can't continue; offer the newest autosave if any.
+static func crash(message: String, on_autosave: Callable, on_new: Callable, on_quit: Callable) -> Control:
+	var parts := _card(Color(UiTheme.INK, 0.92), 400)
+	var column: VBoxContainer = parts[1]
+	column.add_child(UiTheme.heading("The world broke", 28, UiTheme.DANGER))
+	if on_autosave.is_valid():
+		column.add_child(UiTheme.muted(message, 14))
+		column.add_child(_gap(8))
+		var load := UiTheme.button("Load last autosave", on_autosave)
+		column.add_child(load)
+		load.call_deferred("grab_focus")
+	else:
+		column.add_child(UiTheme.muted("The world broke before it could be saved.", 14))
+		column.add_child(_gap(8))
+		column.add_child(UiTheme.button("New world", on_new))
+	column.add_child(UiTheme.button("Quit", on_quit))
 	return parts[0]
 
 
@@ -127,13 +170,13 @@ static func loading(seed_value: int) -> Array:
 	return [parts[0], stage, bar]
 
 
-static func pause_menu(actions: Dictionary) -> Control:
+static func pause_menu(actions: Dictionary, note: String = "") -> Control:
 	var parts := _card(Color(UiTheme.INK, 0.72), 280)
 	var column: VBoxContainer = parts[1]
 	column.add_child(UiTheme.heading("Paused", 28))
-	column.add_child(_gap(8))
+	column.add_child(UiTheme.muted(note if note != "" else " ", 13))
 	var first: Button = null
-	for label in ["Resume", "Settings", "New world", "Main menu", "Quit"]:
+	for label in ["Resume", "Save", "Settings", "New world", "Main menu", "Quit"]:
 		var b := UiTheme.button(label, actions[label])
 		column.add_child(b)
 		if first == null:

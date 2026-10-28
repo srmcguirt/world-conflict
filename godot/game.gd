@@ -8,6 +8,7 @@ extends Node2D
 # then finish().
 
 signal menu_requested
+signal world_broke(message: String)
 
 const OVERLAY_BIOME := 0
 const OVERLAY_CULTURE := 1
@@ -82,6 +83,9 @@ var _ghost_layers: Array[Node2D] = []
 var _views := {}  # founding tile -> SettlementView, with its ghosts in _ghost_views
 var _ghost_views := {}  # founding tile -> [west copy, east copy]
 var _view_keys := {}  # founding tile -> its last (tier, culture, built), to redraw only on change
+var _last_autosave_year := 0
+var _last_autosave_ms := 0
+var _broken := false
 var _shots: Array[Dictionary] = []
 var _shot_timer := 0.0
 
@@ -143,6 +147,8 @@ func finish() -> void:
 	_drain_events()
 	_log.refresh(true)
 	apply_settings()
+	_last_autosave_year = sim.tick()
+	_last_autosave_ms = Time.get_ticks_msec()
 
 
 func apply_settings() -> void:
@@ -261,6 +267,9 @@ func _layout_hud() -> void:
 func _process(delta: float) -> void:
 	if camera == null:
 		return
+	if sim.is_poisoned():
+		_on_poisoned()
+		return
 	if not paused:
 		_run_budgeted(delta)
 	_update_bar()
@@ -311,6 +320,29 @@ func _run_budgeted(delta: float) -> void:
 		repaint_if_dirty()
 		_drain_events()
 		_log.refresh()
+		_maybe_autosave()
+
+
+# R12: a rolling autosave once 100 sim-years have passed and at least 60 real
+# seconds, always between ticks.
+func _maybe_autosave() -> void:
+	var years := sim.tick() - _last_autosave_year
+	var seconds := float(Time.get_ticks_msec() - _last_autosave_ms) / 1000.0
+	if years < SaveStore.AUTOSAVE_YEARS or seconds < SaveStore.AUTOSAVE_SECONDS:
+		return
+	if SaveStore.autosave(sim):
+		_last_autosave_year = sim.tick()
+		_last_autosave_ms = Time.get_ticks_msec()
+
+
+# R5: a caught panic poisons the Sim; the world stops and app.gd offers the
+# last autosave.
+func _on_poisoned() -> void:
+	if _broken:
+		return
+	_broken = true
+	paused = true
+	world_broke.emit("The world can't go on from here. Your last autosave can.")
 
 
 func _update_bar() -> void:

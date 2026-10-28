@@ -12,7 +12,7 @@ use crate::hex;
 use crate::world::{GRID_WIDTH, World};
 
 /// A settlement's tier, 0–3 in Milestone 6a (tiers 4–5 wait for later eras).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Tier {
     Camp = 0,
     Village = 1,
@@ -32,7 +32,7 @@ impl Tier {
 }
 
 /// A people's settlement: a founding tile, her claimed catchment, and her tier.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Settlement {
     pub id: u32,
     pub culture_id: u16,

@@ -1942,11 +1942,12 @@ Target: this design doc's UI. No DESIGN.md exists. The gstack designer is unavai
 
 ### Screen flow and play layout (user direction 2026-10-27: "let's get a UI")
 - **Flow:** Title → New world → Loading → Play, with an Esc menu over Play. There is no other screen.
-  - **Title:** the name, and [New world] [Continue] [Settings] [Quit]. Continue is disabled with "No saved worlds yet" until save and load exist (the Load row in Interaction states).
+  - **Title:** the name, and [Continue] [New world] [Settings] [Quit]. Continue opens the newest save and names its year and seed; with no save it is disabled with "No saved worlds yet", and a save it can't open shows the Load row's message (Interaction states).
   - **New world:** a seed field that takes a number or a word (a word hashes to a number, shown beside it, so "share your world seed" works with either), a [Random] button, and [Begin] / [Back]. An empty or unusable seed shakes the field with "seeds are numbers or words".
   - **Loading:** the staged bar from Interaction states, one label per real stage: "Raising the mountains…" (world generation), "Shaping the land…" (terrain bands, which fill the bar), "Setting the first people by the river…" (settlements and camera). The seed stays on screen. The terrain build is spread across frames so the bar moves.
   - **Play** opens paused at year 0 on Eden, per the journey storyboard.
-  - **Esc menu:** pauses the world while open. [Resume] [Settings] [New world] [Main menu] [Quit]. Esc first clears an armed power or a selection; only an Esc with nothing to clear opens the menu.
+  - **Esc menu:** pauses the world while open. [Resume] [Save] [Settings] [New world] [Main menu] [Quit]. Esc first clears an armed power or a selection; only an Esc with nothing to clear opens the menu.
+  - **Saves** *(added 2026-10-27 with save and load)*: one world slot plus R12's three rolling autosaves, in `user://saves/`. Save writes the slot; leaving a world (New world, Main menu, Quit) writes it too, so Continue always has the last world played. Kingdom events in the log are UI-only (R4) and start fresh after a load; verses are saved.
   - **Settings:** pause on great events (on by default), UI scale (80–150%), and show frame time. Saved to `user://settings.cfg`.
 - **Play layout (D10):** the map fills the window. A one-line top bar holds year, speed, overlay and peoples on the left and a menu button on the right. The power toolbar sits bottom-center. The event log is a strip along the bottom edge, one line collapsed (the newest verse, with a gold pip when something new arrives), and `L` expands it to the recent entries. One selection panel floats top-left under the bar when something is clicked.
 - **Keys:** Space pause, `[` `]` speed, `M` overlay, `L` log, `H` home to the Chosen, `1`–`7` powers, Esc as above.

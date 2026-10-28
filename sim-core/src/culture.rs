@@ -29,7 +29,7 @@ pub const COMMUNAL: usize = 4;
 pub const NO_CULTURE: u16 = u16::MAX;
 
 /// Which people the god favors. Exactly one culture is `Chosen` at any time.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Favor {
     Chosen,
     Other,
@@ -49,7 +49,7 @@ pub fn distance(a: &[f32; DIMS], b: &[f32; DIMS]) -> f32 {
 ///
 /// `id` is the index in `World::cultures`; `centroid` is the population-weighted
 /// mean of its member tiles, refreshed every 10 ticks.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Culture {
     pub id: u16,
     pub parent_id: Option<u16>,

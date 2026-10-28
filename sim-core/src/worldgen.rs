@@ -37,7 +37,7 @@ const SEED_MOISTURE: u64 = 0x4015_7A2E_5598_7654;
 /// The six biomes of the first playable (design, Milestone 1).
 ///
 /// `Ice` is not generated: it is the latitude override above ±75°.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Biome {
     Ocean,
     Beach,

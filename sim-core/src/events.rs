@@ -18,7 +18,7 @@ use crate::world::World;
 pub const QUEUE_CAP: usize = 4_096;
 
 /// What happened.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum EventKind {
     TierUp { tier: u8 },
     TierDown { tier: u8 },
@@ -30,7 +30,7 @@ pub enum EventKind {
 }
 
 /// One event: what, when, whose and where.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Event {
     pub tick: u64,
     pub kind: EventKind,
@@ -42,7 +42,7 @@ pub struct Event {
 }
 
 /// The bounded queue between the sim and the UI (R4).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct EventQueue {
     events: VecDeque<Event>,
     dropped: u64,

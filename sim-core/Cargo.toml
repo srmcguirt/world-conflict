@@ -14,7 +14,10 @@ rand = { version = "0.9", default-features = false, features = ["std"] }
 # Building catalog and invention graph are data files (design, Data not code).
 ron = "0.8"
 serde = { version = "1", features = ["derive"] }
-rand_pcg = "0.9"
+rand_pcg = { version = "0.9", features = ["serde"] }
+# Save files (design, Snapshot contents): compact binary serde, so a snapshot
+# keeps every float bit-exact and autosave doesn't stall a frame.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 
 [dev-dependencies]
 # Benchmark gate only: never linked into the shipped dylib.

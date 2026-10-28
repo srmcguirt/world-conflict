@@ -29,7 +29,7 @@ pub const SCHISM_PASSES: u8 = 2;
 
 /// The doctrine a people live by. One per belief axis (design, Belief model);
 /// `just` comes from covenants in Milestone 8, not from belief.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Doctrine {
     Wrathful,
     Benevolent,
@@ -78,7 +78,7 @@ impl Doctrine {
 }
 
 /// One religion: the belief it was founded on, and when.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Faith {
     pub id: u16,
     pub founded_tick: u64,

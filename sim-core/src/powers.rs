@@ -10,7 +10,7 @@ use crate::world::{GRID_WIDTH, World};
 use crate::worldgen::Biome;
 
 /// The first playable's six powers (design, Powers).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Power {
     /// Lift land out of the sea.
     Raise,
@@ -94,14 +94,14 @@ impl Power {
 }
 
 /// What a queued action does.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ActionKind {
     Power { power: Power, x: usize, y: usize },
     Anoint { culture_id: u16 },
 }
 
 /// One queued player action and the tick it takes effect on.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Action {
     pub tick: u64,
     pub kind: ActionKind,
@@ -112,7 +112,7 @@ pub struct Action {
 pub const IMMEDIATE_EVIDENCE: f32 = 0.15;
 
 /// A witness tile waiting for its 5-tick outcome window to close.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PendingOutcome {
     pub tile: usize,
     pub until: u64,

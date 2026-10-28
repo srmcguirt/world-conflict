@@ -8,7 +8,7 @@ use crate::faith::Doctrine;
 use crate::powers::Power;
 
 /// How the witness read the event.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Polarity {
     /// It hurt them.
     Wrath,
@@ -19,7 +19,7 @@ pub enum Polarity {
 }
 
 /// What happened, as the people tell it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VerseKind {
     /// The opening line of a scripture.
     Genesis,
@@ -36,7 +36,7 @@ pub enum VerseKind {
 }
 
 /// One line of holy text.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Verse {
     pub tick: u64,
     pub kind: VerseKind,

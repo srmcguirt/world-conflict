@@ -16,7 +16,7 @@ pub const JEALOUS: usize = 4;
 pub const ABSENT: usize = 5;
 
 /// What a people believe about the god. Axis values live in [0, 1].
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Belief {
     pub wrathful: f32,
     pub benevolent: f32,

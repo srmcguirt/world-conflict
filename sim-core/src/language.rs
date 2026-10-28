@@ -64,7 +64,7 @@ pub fn power_word(power: crate::powers::Power) -> usize {
 
 /// One language: phonemes, a drift counter per core word, and whose words it
 /// borrowed.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Language {
     pub id: u16,
     /// The tongue she descends from, `None` for the first people's language.

@@ -1,9 +1,10 @@
 extends Node
 
-# The screen flow (design, Screen flow and play layout): Title → New world →
-# Loading → Play, with the Esc menu and settings over Play. Menus live on a
-# CanvasLayer above the game; the game itself is one Game node, rebuilt for
-# every new world.
+# The screen flow (design, Screen flow and play layout): Title → New world or
+# Continue → Loading → Play, with the Esc menu and settings over Play. Menus
+# live on a CanvasLayer above the game; the game itself is one Game node,
+# rebuilt for every world. Leaving a world saves it; Continue loads the newest
+# save (SaveStore).
 #
 # Flags: `-- --shots [--years N]` loads seed 1 and captures the map tour;
 # `-- --ui-shots` captures every screen; both quit when done.
@@ -52,12 +53,14 @@ func _show(screen: Control) -> void:
 
 
 func show_title() -> void:
-	_end_game()
-	_show(MenuScreens.title(show_new_world, _open_settings.bind(show_title), _quit))
+	_leave_world()
+	var newest := SaveStore.newest()
+	var saved: Dictionary = newest.get("header", {})
+	_show(MenuScreens.title(show_new_world, _continue, saved, _open_settings.bind(show_title), _quit))
 
 
 func show_new_world() -> void:
-	_end_game()
+	_leave_world()
 	_show(MenuScreens.new_world(func(seed_value: int) -> void: start_world.call(seed_value, 0), show_title))
 
 
@@ -77,32 +80,29 @@ func _open_menu() -> void:
 		return
 	_was_paused = game.paused
 	game.paused = true
-	_show(
-		MenuScreens.pause_menu(
-			{
-				"Resume": _resume,
-				"Settings": _open_settings.bind(_open_menu_again),
-				"New world": show_new_world,
-				"Main menu": show_title,
-				"Quit": _quit,
-			}
-		)
-	)
+	_open_menu_again()
 
 
 # Back from settings into the Esc menu keeps the paused state it saved.
-func _open_menu_again() -> void:
+func _open_menu_again(note: String = "") -> void:
 	_show(
 		MenuScreens.pause_menu(
 			{
 				"Resume": _resume,
-				"Settings": _open_settings.bind(_open_menu_again),
+				"Save": _save_now,
+				"Settings": _open_settings.bind(_open_menu_again.bind("")),
 				"New world": show_new_world,
 				"Main menu": show_title,
 				"Quit": _quit,
-			}
+			},
+			note
 		)
 	)
+
+
+func _save_now() -> void:
+	var saved := SaveStore.save_world(game.sim)
+	_open_menu_again("Saved at year %d" % game.sim.tick() if saved else "The world could not be saved")
 
 
 func _resume() -> void:
@@ -112,13 +112,42 @@ func _resume() -> void:
 
 
 func _quit() -> void:
+	_leave_world()
 	get_tree().quit()
+
+
+# Leaving a world saves it, so Continue always has the last one played. A
+# broken world (R5) or one still loading has nothing safe to save.
+func _leave_world() -> void:
+	if game != null and not _loading and game.sim != null and not game.sim.is_poisoned():
+		SaveStore.save_world(game.sim)
+	_end_game()
 
 
 func _end_game() -> void:
 	if game != null:
 		game.queue_free()
 		game = null
+
+
+func _continue() -> void:
+	var newest := SaveStore.newest()
+	if newest.is_empty():
+		show_title()
+		return
+	start_from_save(newest["path"])
+
+
+# Loads a save into play, or explains why it can't (design, Load row: an
+# older format reads "This world is from an older version (format N).").
+func start_from_save(path: String) -> void:
+	var loaded: Dictionary = Sim.load_save(SaveStore.read(path))
+	if loaded["sim"] == null:
+		_end_game()
+		_show(MenuScreens.notice("Can't open this world", loaded["error"], show_title))
+		return
+	var sim: Sim = loaded["sim"]
+	await _enter_world(sim, 0, "Opening the world…")
 
 
 # Loading in the design's real stages; each await lets a frame draw so the
@@ -128,13 +157,25 @@ func start_world(seed_value: int, years: int) -> void:
 	_loading = true
 	var parts := MenuScreens.loading(seed_value)
 	_show(parts[0])
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _enter_world(Sim.create(seed_value), years, "", parts)
+
+
+# The stages shared by a new world and a loaded one: the first years (new
+# worlds only), the terrain bands, then settlements and the camera.
+func _enter_world(sim: Sim, years: int, opening: String, parts: Array = []) -> void:
+	_end_game()
+	_loading = true
+	if parts.is_empty():
+		parts = MenuScreens.loading(sim.seed())
+		_show(parts[0])
 	var stage: Label = parts[1]
 	var bar: ProgressBar = parts[2]
 	bar.max_value = 1.0
-	await get_tree().process_frame
-	await get_tree().process_frame
-
-	var sim := Sim.create(seed_value)
+	if opening != "":
+		stage.text = opening
+		await get_tree().process_frame
 	game = Game.new()
 	add_child(game)
 	game.add_child(sim)
@@ -161,6 +202,7 @@ func start_world(seed_value: int, years: int) -> void:
 	await get_tree().process_frame
 	game.finish()
 	game.menu_requested.connect(_open_menu)
+	game.world_broke.connect(_on_world_broke)
 	_loading = false
 	_show(null)
 	world_ready.emit()
@@ -178,6 +220,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_resume()
 	elif not game.handle_escape():
 		_open_menu()
+
+
+# R12: the sim poisoned itself on a panic; it can't go on, but the newest
+# autosave can.
+func _on_world_broke(message: String) -> void:
+	var autosave := SaveStore.newest_autosave()
+	var load_autosave := Callable()
+	if autosave != "":
+		load_autosave = func() -> void: start_from_save(autosave)
+	_show(MenuScreens.crash(message, load_autosave, show_new_world, _quit))
 
 
 # --ui-shots: every screen once, for review.
@@ -205,8 +257,16 @@ func _ui_tour() -> void:
 		await _capture("ui-polity")
 	_open_menu()
 	await _capture("ui-esc-menu")
-	_open_settings(_open_menu_again)
+	_open_settings(_open_menu_again.bind(""))
 	await _capture("ui-settings")
+	_save_now()
+	await _capture("ui-esc-menu-saved")
+	show_title()
+	await _capture("ui-title-continue")
+	start_from_save.call(SaveStore.newest()["path"])
+	if _loading:
+		await world_ready
+	await _capture("ui-continued")
 	get_tree().quit()
 
 
