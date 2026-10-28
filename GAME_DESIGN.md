@@ -7,9 +7,9 @@ Status: APPROVED
 Mode: Builder
 
 ## Problem Statement
-Build a god-game in which civilizations rise on a newly generated Earth-like world. Humanity starts at a single origin (Eden) and migrates outward. As peoples spread, they adapt physically to their regions and become distinct cultures. Over time they form kingdoms and invent buildings, technology, cultures, religions and languages, and they wage wars as resources and human nature collide. The player is a god with powers: shape terrain, paint biomes, unleash disasters (tornadoes, meteors, nukes), spawn creatures, and give rewards.
+Build a god-game in which civilizations rise on a newly generated Earth-like world. Humanity starts at a single origin (the Garden) and migrates outward. As peoples spread, they adapt physically to their regions and become distinct cultures. Over time they form kingdoms and invent buildings, technology, cultures, religions and languages, and they wage wars as resources and human nature collide. The player is a god with powers: shape terrain, paint biomes, unleash disasters (tornadoes, meteors, nukes), spawn creatures, and give rewards.
 
-The player's core role, chosen in this session: **guide a favorite people.** You pick one people, then reward and nudge them from Eden onward while the rest of the world reacts.
+The player's core role, chosen in this session: **guide a favorite people.** You pick one people, then reward and nudge them from the Garden onward while the rest of the world reacts.
 
 ## What Makes This Cool
 - **Religion is the people's theory of you.** God-games usually treat the player like weather. Here, every blessing, meteor and spared enemy is evidence that a people uses to build doctrine about the god. Smitten rivals form their own religions about the same god. Holy wars come out of the player's own history.
@@ -29,14 +29,14 @@ The player's core role, chosen in this session: **guide a favorite people.** You
 2. **Revised after the second opinion:** a hybrid simulation.
    - **Base layer:** population cohorts on tiles, stored in packed arrays.
    - **Individuals on top**, capped at about 2,000 alive at once:
-     - one tracked family line descended from Eden;
+     - one tracked family line descended from the Garden;
      - **witnesses** promoted out of a tile's cohort when a power touches it, with traits sampled from the tile's distributions;
      - 50 to 200 notables for the chosen people (kings, prophets, inventors, heroes);
      - 5 to 15 notables for each rival polity.
    - **Dead notables become "legends":** text records that live on in scripture and never tick again.
 3. Physical adaptation comes from environment and isolation. Skin tone tracks UV (latitude). Stature and build track temperature. Lung capacity tracks altitude. Adaptations give cosmetic differences and small regional perks, and never a ranking of better or worse peoples. All peoples are fictional and are not mapped to real-world groups.
 4. Religion (the belief model) is the core differentiator and is built early.
-5. **First playable** (the "Eden build", Milestone 5): one generated world, Eden, migration, 3 to 5 diverging cultures, the 6 first powers, and belief, adaptation and language drift.
+5. **First playable** (the "Garden build", Milestone 5): one generated world, the Garden, migration, 3 to 5 diverging cultures, the 6 first powers, and belief, adaptation and language drift.
    - It is set entirely in the Stone Age, with no tech progression. The Stone→Bronze tech tree arrives in Milestone 7.
    - Later eras and the late-game powers come after that.
    - *(Revised after spec review so it matches the milestone order.)*
@@ -44,7 +44,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
 
 ## Cross-Model Perspective (Claude subagent, independent read)
 - **Coolest version:** scripture as an unreliable narrator that drifts with language. Daughter cultures go to war over whose version of the meteor is true.
-- **What excites the user most:** "pick one people, reward and nudge them from Eden onward". Attachment and lineage matter more than a world simulator.
+- **What excites the user most:** "pick one people, reward and nudge them from the Garden onward". Attachment and lineage matter more than a world simulator.
 - **Premise 2:** revise rather than reject. Populations alone turns "guiding a favorite" into "guiding a heatmap". Use witness promotion, a family line, and notables that become legends.
 - **Performance:**
   - Typed GDScript over packed arrays: about 12 to 20k tiles in 3 to 8 ms per tick, plus about 2k individuals in 2 to 5 ms. That works out to about 50 to 100 sim-years per second on a 160×80 map.
@@ -128,7 +128,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - A candidate must pass on 2 consecutive checks (hysteresis) before it splits.
   - The split creates a new `Culture` with `parent_id`, copies the parent's scripture and phoneme set (which then drift), and emits `culture_split`.
 - **Chosen vs. rival.**
-  - Eden's culture starts `Chosen`. **Exactly one culture is `Chosen` at any time.**
+  - The Garden's culture starts `Chosen`. **Exactly one culture is `Chosen` at any time.**
   - **On a split:** the daughter containing the family heir's tile stays `Chosen`. If no daughter contains the heir, because the line died out or the heir lives elsewhere, the most populous daughter stays `Chosen`. Every other daughter becomes `Other`.
   - Before polities exist (Milestones 1-5), a "rival" is simply any culture whose favor is `Other`. From Milestone 6, polities group cultures, and the rival fidelity rules apply per polity.
   - When a culture becomes `Other`, its notables over the 15-notable budget are demoted to legends, lowest salience first. Salience = scripture mentions + rank.
@@ -269,7 +269,7 @@ The player's core role, chosen in this session: **guide a favorite people.** You
   - All place, person and god names come from the culture's vocabulary, and a language family tree can be viewed.
 - **Settlements and kingdoms:** tiles above a density threshold become settlements. Polities form by conquest or federation. Building styles depend on biome, culture and era.
 - **Tech:** inventions are discovered from pressure and resources, plus contact with other peoples.
-  - The first playable (Eden build) is Stone Age only. The Stone→Bronze tree arrives in Milestone 7.
+  - The first playable (Garden build) is Stone Age only. The Stone→Bronze tree arrives in Milestone 7.
   - Later eras: Iron, Classical, Medieval, Gunpowder, Industrial and Atomic.
 - **War:** driven by resource scarcity, borders and belief divergence. Battles are resolved as aggregates, between polities. Holy wars come from schisms.
 
@@ -434,7 +434,7 @@ Band ─► Chiefdom ─┬─► Theocracy ──┬─► Holy empire
 - heresies (priests);
 - secession (merchants).
 
-The family line from Eden can rise into rule or fall into the commoner stratum. The inspector shows where they stand.
+The family line from the Garden can rise into rule or fall into the commoner stratum. The inspector shows where they stand.
 
 **Player levers.**
 - **Bless:** prosperity.
@@ -672,7 +672,7 @@ The god can cleanse the earth with water from the depths. A select few are saved
                         deepen, plains gain fertile sediment, coastlines move
           │
  8. THE LANDING         the vessel rests on the nearest high ground; the few step
-                        out onto a new world: a second Eden
+                        out onto a new world: a second Garden
           │
  9. THE PROMISE         the god may bind itself never to flood again (a sign set
                         in the sky); the choice shapes every people after
@@ -680,7 +680,7 @@ The god can cleanse the earth with water from the depths. A select few are saved
 
 **Choosing the few.**
 - **Who qualifies:** any notable with piety of 0.7 or more, of any people.
-  - It's usually your Chosen family line (the heir's household), so the line from Eden survives.
+  - It's usually your Chosen family line (the heir's household), so the line from the Garden survives.
   - Choosing a household from another people is allowed. It works as a re-anointing (D11), so the flood becomes a new covenant with a new people.
 - **The household:** up to 8 named individuals plus their tile cohort, capped at 60 people.
 - **Joining:** during the warning, a neighbor with piety of 0.8 or more may join the household while space remains (event: "and some believed").
@@ -864,13 +864,124 @@ The game shows this before you confirm: "The world is mostly righteous. Your peo
 
 **Review status:** not yet reviewed by /plan-eng-review or /plan-design-review. Run both before Milestone 6.
 
+## Out of the Garden (new milestone, after M6a and before M6b)
+
+Approved 2026-10-27 after the first hands-on playtest, which showed humanity spreading like a stain, nothing for the player to do, and powers that felt empty. Engineering review 2026-10-28 (D1 to D17, all answered by the author). The full record, with the problem statement, the approaches weighed, both spec reviews, the outside voice and the decision ledger R1 to R12, is `docs/designs/out-of-the-garden.md`. This section is the spec; where it differs from an older section of this document, this section wins (see "What it changes" below).
+
+### Names and theology (author's rules)
+
+- The start place is **the Garden**. Adam's line is **Dirt**; the other line is **the snake's line**. No biblical person names anywhere in the game: every name comes from `names.rs`.
+- God is never quid pro quo. Answers come in God's time, as gifts, signs and wonders (the ten plagues among them), or dreams and visions. Prayers are remembered for generations.
+
+### Premises
+
+Agreed in the session (premise 4 revised after the second opinion):
+
+1. **Two lines open the game.** The first family yields two lines. **Dirt** (Adam's line, named for *adamah*, the ground he came from) starts Chosen. **The line of the snake** does not. The long arc is to **redeem the snake's line or empower Dirt**.
+2. **Bands, not a stain.** Early humanity moves as visible bands that walk, bud off and settle (reusing the exodus Band from the M9 design). The snake's line refuses its sentence to wander and builds the first city; Dirt finds rest in working the land.
+3. **People reach toward God unprompted** (offerings, prayers, rituals) while trying to survive. **Every prayer is remembered.** Answers are never quid pro quo: they come in God's time, as gifts to people, signs and wonders, or dreams and visions.
+4. **You author each promise; part of it unfolds beyond you.** You set the hidden purpose through visions given to prophets. Each vision is a promise you keep in your own time, even generations later, and the keeping is the deepest faith event. Part of every vision also unfolds on its own, so even the player does not hold the whole purpose.
+5. **Every power shows on the map,** and people react where it lands (gathering, fleeing, raising an altar).
+6. **God may speak through dreams and visions to a few.** This overrides Open Question 2's "acts and signs only" recommendation (Open Questions, below).
+7. **The snake's line resists God by its own nature** *(author's revision)*. Left to itself, the snake's line hardens: it trusts its own works, raises rulers and idols in God's place, takes by force, and oppresses the weak. In the author's words, it should "naturally" "resist God and become wicked, as they were historically." This is its default course, emerging from its starting beliefs and drives, not a script and not the player's doing. Redemption runs against that grain, which is what makes it mean something.
+8. **Peoples are watched as they spread, meet and change** *(author's revision)*. The anthropology is the heart of the game: bands meeting on the map, trading, marrying in, quarrelling, raiding, borrowing words and gods, and their looks, dress, houses and speech drifting apart over generations, all visible, not only in numbers.
+
+### The plan
+
+**Out of the Garden**, a new milestone inserted before M6b (covenants), built in order so each step is playable on its own:
+
+1. **The generated founding.** From the seed and the Garden's surroundings, generate the first family's two lines and the founding event (what each line offers from the land it works, and how they part). Written as the opening verses of both scriptures. Dirt starts Chosen. Every people carries a **line** (Dirt or the snake's line), set here, inherited unchanged at each split, kept by the larger side when peoples blend, and saved in the snapshot *(eng review D4)*.
+2. **Bands.** Pull the exodus `Band` forward from the M9 design: a group with a people, a line, a leader and a position, moving by a deterministic path. Early humanity moves as bands instead of tile diffusion; a band buds a daughter when it grows past a size or after a quarrel; a band settles where land suits its line. **The snake's line** stops wandering early and founds the first settlement, which grows into the first city. Its starting belief leans toward self-reliance and away from God (the existing belief axes), set so it hardens on about half of seeds (a 50/50 lean, *author's choice*, tuned from playtests), and its culture weights favor walls, rulers and taking by force; from there, its drift toward wickedness emerges through the existing systems (doctrine forming from what it sees and does, government, inequality, unrest, and later raids and war). Wickedness shows as acts the world records: idols and rulers worshipped, raids on neighbors, the weak oppressed. **Dirt** walks slowly and settles on arable land. **Bands and settled spread** *(eng review D7)*: a band of 8 or more becomes a settled people the moment it founds a settlement (a tier-0 camp), and only on unclaimed land. From then on that people spreads by the existing tile diffusion, but only within the catchments its own settlements claim, never into another people's. Outside claimed land, people move only as bands, and the old density founding outside claimed land is removed. A band plans its route once, over the land's real crossing cost, so bands follow coasts, rivers and grassland and skirt deserts and ranges; it walks one step a year; at most 64 bands walk at once, crowded settlements waiting their turn; a band that finds no reachable unclaimed land within 100 years of forming heads to the nearest settlement of its own people or line and joins it, or, if none is reachable, joins the people whose land it stands on through the merge rule; a settlement below one person for two checks releases its catchment, so land can reopen *(eng review D10, D16)*. A band carries its own headcount: its people's population, piety weighting and every aggregate count its walkers, and its current tile shows its people on the map without holding tile population *(eng review D8)*. A band that comes within reach of a different people meets it as an encounter (step 2b), weighted by both sides' needs, beliefs and lines: kin of the same line lean toward joining, enemies and a hardened snake's line toward raiding. A crowded settlement buds a new band, so band budding continues all game; it slows as open land runs out. The first era is simply when bands are most of the world.
+2b. **Peoples meeting, made visible.** When bands or settled peoples come into contact, the encounter is an event on the map and in the log, chosen from their needs, beliefs and the snake line's nature: they **trade**, **marry in** (the existing culture blending, now shown as a joined band or a mixed settlement), **quarrel and part**, or **raid**. Contact also carries words and gods between them (language borrowing and the existing scripture copies). Drift is shown, not just computed: dress, house styles, faces (adaptation) and speech change visibly across generations, and the culture and language overlays show where peoples meet and blend. The event log tells the encounter in the peoples' own words. **Skirmishes and diplomacy** *(eng review D11)*: a raid resolves by numbers, strength being walkers times martial weight; the loser loses up to 15% and never falls below 8, then flees on a new route. A settled people that loses a raid takes its losses across the raided catchment, never below 8, cut by its Defense buildings; a heavy loss buds a refugee band that walks away *(eng review D17)*. Every pair of peoples keeps a standing, from kin through friendly and wary to feud, that each meeting nudges and that lasts across generations. From Stage 1, peoples (bands and settled alike) can also hold **truces**, **alliances** and **tribute** with one another. When polities form in M6, a polity's relations start from its member peoples' standings and agreements (Garden Open Question 11). **Intercession at a meeting** *(eng review D12)*: because routes are planned, the game sees two peoples converging a few years ahead and marks it on the map and in the log. Powers the player uses in that window shape the meeting: a blessing strengthens the weaker side, a storm blocks a path, a sign can turn a raid into parting. In Stage 2 the threatened people also cry out, opening a prayer the player may answer in God's time or not at all; it is never a trade and never a sure fix. **Within a line and between lines** *(author's direction and eng review D13)*: diplomacy inside a line differs from diplomacy between lines. Kin of one line start friendly and their quarrels end in parting, not raids; peoples of different lines start wary, and raids and tribute are possible. The player can **unify** bands and peoples of one line (a new player act, queued and logged like every act) into a **league of kin**: they stay different tribes and tongues, each drifting in dress, speech and custom, but pool strength in skirmishes and defend one another against other lines. The lines bond differently. In the author's words, Dirt's peoples are "united by their differences still, bonded by faith": a Dirt league holds by shared faith, not likeness. The snake's line "is bonded by strength in traits that only their kind share": its leagues hold only among peoples alike in traits, tribe and tongue, it bonds poorly with anyone different, and it "would rather conquer or overpower", preferring fortifications and citadels in its cities to spreading through the world (fewer bands budded, more Defense buildings).
+
+3. **Offerings and the prayer ledger.** Bands and settlements act toward God unprompted, choosing acts from their need, doctrine and the land (first grain, a lamb, a stone raised, a dance for rain). Each act becomes a prayer record that is never deleted: who, where, when, what for.
+   - **Bounded:** prayers of the same kind, by the same people, at the same place merge into one record with a count and its first and last year. Each people holds at most 32 open records; when full, the oldest open record is closed into a compact remembered entry (kept in the snapshot like legends, outside the hot tick path) that an answer can still cite.
+   - **Shown:** the HUD shows the open records of the Chosen and of any people with a living witness, newest and longest-waiting first; scripture records each prayer when it is first made.
+4. **Answers in God's time.** The player answers any open or remembered prayer, at any time, in one of three forms: **a gift** to a person (a new notable trait or skill, a child), **a sign or wonder** (a power aimed at the place), or **a dream or vision** (step 5). An answer generations later still cites the prayer ("the Lord remembered the prayer of Ouvra").
+   - **The act:** `answer_prayer(prayer_id, form, target)`, queued and logged like every player act (D9, R10). A sign-or-wonder answer applies its power at the prayer's place at the next tick.
+   - **Once answered:** an answered record closes and becomes a remembered entry, which frees one of the people's 32 open slots. A closed record cannot be answered again. A new prayer of the same kind at the same place after the answer opens a new record.
+   - **With the witness rule:** the power is still witnessed as usual, but witnesses of the praying people read it as the answer to their prayer: their belief update and verse cite the prayer. A power cast without `answer_prayer` is an ordinary witnessed event and answers nothing, even if it lands near people who prayed.
+5. **Visions as promises.** `give_vision(notable, promise)`, queued and logged like every player act.
+   - **What a promise is:** a structured entry, not free text. The player picks a kind and a target from a list the game generates for that world and moment: *a people will settle at a place*, *a place will hold a city*, *a city will fall*, *a people will reach a size*, *a line will turn toward God*, *a gift will come to the prophet's people*. The game renders it into the vision's words in the prophet's own language.
+   - **When it is kept:** at each 25-year check, the game tests every open promise against the world. A promise is kept the first time its condition is true at a check, however it came true: by the player's own acts or by the world's course. That is how "part unfolds beyond you" works: the player chooses the promise, but does not hold all of how or when it comes about. The condition each kind tests:
+     - *a people will settle at a place:* a settlement of that people, or of a people split from it, stands within 2 tiles of the place;
+     - *a place will hold a city:* a settlement within 2 tiles of the place is at tier 3;
+     - *a city will fall:* the named settlement is at tier 0 or no longer exists;
+     - *a people will reach a size:* that people's population, with every people split from it since the vision, is at least the promised size at the check (tested only at the check, not as a running maximum);
+     - *a line will turn toward God:* the line's population-weighted piety is at least 0.7 at the check;
+     - *a gift will come to the prophet's people:* the player answers a prayer of that people, or of a people split from it, with a gift.
+   - **The hidden clause:** some kinds carry a second clause the game chooses and does not show the player. The promise is kept when its visible condition is met; the hidden clause, if it ever comes true, is a separate later keeping with its own verse ("and more than was spoken").
+   - **Only open promises are offered:** the list the game generates never includes a condition that is already true when the vision is given.
+   - **No penalty for waiting:** an open promise never wears trust down; God's time is not the player's. Keeping one is a great event; scripture marks the years between the vision and the keeping.
+   - **If the prophet's people die out:** the promise stays open. It is remembered by whichever peoples still hold the vision verse (copied at splits, and through contact by the rule below).
+   - **Who hears a vision:** the prophet's own people always. Another people, including the other line, hears it in three ways only: its tiles touch the prophet's people's when the vision is given; it inherits the verse at a split; or through contact: at each 25-year check, a people within the contact radius (14 tiles) of a people holding a vision verse it lacks copies that verse, respelled in its own language as split copies are *(eng review D3)*. A people that never hears it has no record of it.
+6. **Visible powers, and the plagues.** Every power gets an on-map effect (meteor strike and crater, tornado path, blessing glow, rain) and nearby people react visibly; the verse arrives with it. The signs and wonders expand to include the ten plagues of Egypt *(author's revision)*, each a sign aimed at a people or place, each visible where it lands:
+   1. **water turned to blood** (rivers and lakes run red; water-reliant growth stops for a season);
+   2. **frogs** (swarming from the water over the land);
+   3. **gnats** (a haze over settlements; work slows);
+   4. **flies** (swarms over a region; the sign can spare the faithful's tiles);
+   5. **pestilence on livestock** (herding capacity falls);
+   6. **boils** (sickness on people; labor falls);
+   7. **hail** (fire and ice on fields and buildings);
+   8. **locusts** (a moving cloud that strips crops);
+   9. **darkness** (the land goes dark; the night pass over a region for days);
+   10. **death of the firstborn** (the gravest judgment, *settled by the author*): available only against a people that has **resisted earlier signs** (signs aimed at it after which its belief did not turn toward God; the count is a tuning value, starting at three). It takes **10% of that people's youngest generation**. The sim has no ages, so the youngest generation is approximated as the people's growth over the last 20 years.
+   Like every answer, a plague is never a transaction: the people read it through the witness rule, and a plague aimed at an oppressor reads as judgment to the oppressed and as wrath to the oppressor. The plagues fold in the Plague and Darkness signs the existing exodus design (M9) already plans, as signs against a captor.
+7. **Two records, one event.** When a promise is kept, every people that holds the vision records the keeping in its own scripture, in its own way: Dirt in its scripture's voice ("He remembered"); the snake's line in the voice of a city's chronicle, crediting its rulers ("by the king's command"). The two voices are verse styles chosen by the line's doctrine and government, built on the existing scripture system, not a separate inscription system. A people that witnesses the event without having heard the vision records it as an ordinary event. A side-by-side view shows every people's record of one kept promise.
+8. **Redemption.** When a scripture copy carrying a kept promise's Dirt verse reaches a people of the snake's line that recorded the same keeping as its rulers' work, one of its notables may **recognize** the two as the same event. Recognition is the snake's line's turning point: belief shifts toward God, and favor can follow at the player's choice. The trigger and the size of the shift are Garden Open Question 8. Verses found in ruins wait for the existing Ruins design; this milestone uses contact only.
+
+Folding into the existing design: the witness rule still interprets powers; doctrine still forms from what people saw; language drift still shapes each scripture; settlements, polities and save/load carry on. M9's exodus reuses the Band built here.
+
+### Stages
+
+Built and gated in three stages, nothing cut (eng review D6): **Stage 1, the people core** = steps 1 (generated founding, the two lines with the 50/50 lean and the line label), 2 (bands), 2b (peoples meeting), in `bands.rs`, battle-tested before Stage 2 (tests, determinism, the frame budget, and the author's playtest). **Stage 2, faith** = steps 3, 4, 5 (offerings and the prayer ledger, answers, visions as promises, including the D3 contact copy), in `devotion.rs`. **Stage 3** = steps 6, 7, 8 (visible powers and the ten plagues, two records, redemption), planned after Stage 2's core-feeling check.
+
+### What it changes elsewhere in this document
+
+- **Milestone 1 spread:** outside a people's own claimed catchments, people move only as bands; density founding outside claimed land is removed (D7). The M1 tests are kept under a regression contract: outcomes stay, mechanism tests are rewritten for bands, nothing weakened (D14).
+- **Open Question 2** ("acts and signs only") is overridden by premise 6: God may speak through dreams and visions to a few.
+- **The exodus `Band`** from Milestone 8/9 (Captivity and exodus) is pulled forward to the opening. The M6 government also called "Band" (Band, Chiefdom, Monarchy, Theocracy) is a different thing; the code keeps the two names apart.
+- **Diplomacy** between peoples (standings, truces, alliances, tribute, leagues of kin) starts in Stage 1 instead of waiting for Milestone 8 (D11, D13); M6 polities and M8 war start from those standings and agreements.
+- **New player acts**, queued and logged like every act (D9, R10): unify kin into a league, answer a prayer, give a vision.
+- **Saves:** `SAVE_VERSION` 2 adds the line label, bands, standings, agreements, leagues, prayers and promises; version 1 saves are refused with R11's message.
+- **Battle-testing:** Stage 1 is gated by a 64-seed sweep over 5,000 sim-years, with a weekly 10,000-year soak on 8 seeds (D15).
+
+### Garden Open Questions
+
+1. **The hidden clause.** Step 5 settles how part of a vision unfolds beyond the player: the world's own course can keep a promise, and some kinds carry a hidden second clause. Still open: which kinds carry a hidden clause, how the game chooses it, and how often. Decide before step 5.
+2. **The generated founding.** Which land features decide what each line offers and how they part, and how much the player sees or chooses at year 0.
+3. **What "redeem the snake's line" ends in.** Does a redeemed line become Chosen beside Dirt, merge with Dirt, or keep its own path with a new faith? How "empower Dirt" is measured.
+4. **The greatest answer.** The author named the later coming of Jesus as an answer "for freedom from sin and death for believers". Whether and how the game reflects a great late answer is the author's call, and needs care.
+5. **Pacing.** How often people pray, how many prayers wait at once, and what happens at 100× speed so the ledger never floods.
+6. **Budding rules.** Band size limits, quarrel triggers, and how bands become the peoples (cultures) the later systems expect.
+7. **Interaction with existing milestones.** What M1's "3+ distinct peoples by year 2,000" gate becomes when bands drive the split, and which existing tests change.
+
+8. **Recognition.** What makes a notable of the snake's line recognize a kept promise in another people's verse (the copy alone, a belief or piety threshold, a deterministic roll), and how far belief moves when it does. Blocks step 8.
+
+9. **The gravest plague** *(settled: available after a people resists earlier signs; takes 10% of its youngest generation; see step 6)*. Still open: how it is depicted with care.
+10. **How far the snake's line leans** *(settled: a 50/50 starting lean, so it hardens on about half of seeds; tune from playtests)*.
+
+11. **Diplomacy between peoples** *(eng review D11)*. The rules for truces, alliances and tribute before polities exist: what makes each form and end, what each changes (raid odds, joint flight, a share of food paid each check), and how M6 polity diplomacy takes them over. It also sets how a league's bond is measured (shared faith for Dirt, shared traits, tribe and tongue for the snake's line) and how a league frays or breaks, and the raid loss that buds a refugee band. It also sets what each power does to a meeting during the warning window (D12). Decide before step 2b is built.
+
+### Success criteria
+
+- In the first minute of a new world, two bands visibly leave the Garden, and the founding verses name what happened.
+- Within the first 30 minutes, the player has answered at least one prayer in each form, given at least one vision, and seen people react on the map to every power used.
+- At 100× speed, a promise kept generations after its prophet died produces a verse that cites the original vision, in both lines' records, and the side-by-side view shows both.
+- Replay is exact: the same seed and action log reproduce every band path, prayer, vision and verse (R10 tests extended).
+- Left alone for 2,000 years, the snake's line hardens on about half of seeds (the author's 50/50 starting lean): its doctrine turns from God and the log records idols, raids or oppression. On the other half it does not, which keeps redemption meaningful. Tuned from playtests.
+- Watching any 10 minutes at 25× shows peoples meeting (trade, marriage, quarrel or raid) and their dress, houses or speech visibly drifting.
+- The tick stays within the 8 ms frame budget at year 2,000 with bands and the ledger running.
+- The design's playtest gate holds: a friend plays for 30 minutes and tells a story about "their people" without being prompted.
+
 ## Milestones (each one is playable)
-1. **Living Map:** world generation (noise height/moisture → 6 biomes), Eden, population growth toward biome carrying capacity, crowding-driven migration, culture drift and blending. *Done when:* a 2,000-year run shows 3 or more visibly distinct peoples, separated by terrain.
+1. **Living Map:** world generation (noise height/moisture → 6 biomes), the Garden, population growth toward biome carrying capacity, crowding-driven migration, culture drift and blending. *Done when:* a 2,000-year run shows 3 or more visibly distinct peoples, separated by terrain.
 2. **First Witness:** the 6 powers, witness promotion, generated names, scripture panel. *Done when:* you smite something and read what someone believed you meant by it.
 3. **Belief:** belief vectors, doctrines, prophets, schisms, and rival religions about the same god.
 4. **Adaptation:** trait drift (UV, cold, altitude), cosmetic perks, notable portraits, dress and architecture tints.
-5. **Tongues:** language drift, the language family tree, scripture written in a culture's own words, and drifting scripture copies. **→ first itch.io release ("Eden build").**
+5. **Tongues:** language drift, the language family tree, scripture written in a culture's own words, and drifting scripture copies. **→ first itch.io release ("Garden build").**
 6. **Kingdoms:** settlements, polities, buildings, the family line UI. Full detail is in Deep systems → Milestone mapping.
+   - **M6a** (settlements, buildings, polities, the six meters, unrest) is built. **Out of the Garden** comes next, in three stages (the people core, faith, then the visible powers, plagues and redemption), before **M6b** (covenants). See Out of the Garden above.
 7. **Inventions:** the invention graph from Stone to Iron, diffusion, lost knowledge, and Writing's effect on scripture (see Deep systems).
 8. **Strife:** resources, diplomacy and war, including holy wars, plus unrest outcomes, governments, Liberty and Reformation, and social covenants — including god-decrees on the Chosen (3 free, +3 per covenant tier; see Deep systems → Shared design rules).
 9. **Judgments:** captivity and exodus, the Great Flood, and wonders (see Deep systems; split from M8 by D22).
@@ -878,7 +989,7 @@ The game shows this before you confirm: "The world is mostly righteous. Your peo
 
 ## Open Questions
 1. **When the chosen people split, who stays chosen?** The working rule is in Simulation contracts → Chosen vs. rival: favor follows the heir's branch, and re-anointing costs `jealous` belief. What's still open is whether that feels right in play. Revisit after Milestone 3.
-2. **Can the player send messages or commandments, or only act?** The recommendation is acts and signs only (omens, a cloud shape over a tile). That keeps the "they interpret you" core and stays clear of Crest's commandment mechanic.
+2. **Can the player send messages or commandments, or only act?** The recommendation is acts and signs only (omens, a cloud shape over a tile). That keeps the "they interpret you" core and stays clear of Crest's commandment mechanic. *Overridden by Out of the Garden, premise 6: God may speak through dreams and visions to a few.*
 3. **Win/lose conditions:** a pure sandbox, or goals such as "your people reach the Atomic Age with their faith intact"? The proposal is a sandbox with optional epoch goals.
 4. **Art style:** a pixel-art map with painted notable portraits, or flat vector? Decide before Milestone 4.
 5. **Version pinning:** confirm the latest stable Godot 4.x at install. Pin the gdext crate version that matches it, using its `api-4-x` feature.
@@ -889,7 +1000,7 @@ The game shows this before you confirm: "The world is mostly righteous. Your peo
 - Benchmark gate (Milestone 1): the release build's `cargo bench` on the 320×160 map is measured against the 100 sim-years per second target. If it misses, the speed ceiling is lowered (see Frame and tick scheduling).
 - Milestone 1 "distinct peoples" is measurable: at year 2,000 there are 3 or more living cultures, each with 30 or more tiles, and every pair's centroids are at least 0.25 apart.
 - Identical seed + action log → identical chronicle (determinism test).
-- Eden build: a friend plays for 30 minutes and tells you a story about "their people" without being prompted.
+- Garden build: a friend plays for 30 minutes and tells you a story about "their people" without being prompted.
 
 ## Distribution Plan
 - `git init` in `/Users/smcguirt/Projects/world-conflict` and push to GitHub: public at `srmcguirt/world-conflict` *(revised 2026-10-27: user chose public over private)*.
@@ -926,7 +1037,7 @@ The game shows this before you confirm: "The world is mostly righteous. Your peo
 5. Add the event queue, the 6 powers, witness promotion, Markov names and the scripture panel (Milestone 2).
 6. Write the `cargo test` determinism test and benchmark the tick at 160×80 and 320×160.
 
-**The assignment:** Install Godot and Rust tonight. Get the gdext hello-world `Sim` node printing in Godot, then get Milestone 1 running. Take a screenshot at year 2,000 that shows three or more peoples split from Eden. If they don't split, tune the migration cost of mountains and deserts before writing any more systems.
+**The assignment:** Install Godot and Rust tonight. Get the gdext hello-world `Sim` node printing in Godot, then get Milestone 1 running. Take a screenshot at year 2,000 that shows three or more peoples split from the Garden. If they don't split, tune the migration cost of mountains and deserts before writing any more systems.
 
 ## What I noticed about how you think
 - You picked "Guiding a favorite" over chaos or reading history. You want a relationship with your people, not just a sandbox, and that choice produced the game's best idea.
@@ -1813,7 +1924,7 @@ Outside Voice dispositions: OV-1 accepted (R3 reopened, D9 A); OV-2 accepted (R9
 
 ## TODOS.md proposals
 ### R16: TODO: Wider Mac distribution before any Steam or wide release
-What: universal (arm64 + x86_64) dylib via lipo, plus Apple notarization with a paid Developer account. Why: D3 shipped Apple Silicon only and ad-hoc signing; a wide release needs Intel support and no Gatekeeper friction. Pros: reaches every Mac, no "Open Anyway" step. Cons: $99/yr account, notarization step in CI, double build time. Context: only matters once the Eden build proves fun; start from the Distribution Plan and R2. Depends on: Eden build released; decision to go to Steam.
+What: universal (arm64 + x86_64) dylib via lipo, plus Apple notarization with a paid Developer account. Why: D3 shipped Apple Silicon only and ad-hoc signing; a wide release needs Intel support and no Gatekeeper friction. Pros: reaches every Mac, no "Open Anyway" step. Cons: $99/yr account, notarization step in CI, double build time. Context: only matters once the Garden build proves fun; start from the Distribution Plan and R2. Depends on: Garden build released; decision to go to Steam.
 State: approved
 Actual answer: B) Skip (D17, user answer 2026-10-26)
 Accepted scope: none (not tracked; Distribution Plan keeps notarization out of scope)
@@ -1960,7 +2071,7 @@ Target: this design doc's UI. No DESIGN.md exists. The gstack designer is unavai
   - **Title:** the name, and [Continue] [New world] [Settings] [Quit]. Continue opens the newest save and names its year and seed; with no save it is disabled with "No saved worlds yet", and a save it can't open shows the Load row's message (Interaction states).
   - **New world:** a seed field that takes a number or a word (a word hashes to a number, shown beside it, so "share your world seed" works with either), a [Random] button, and [Begin] / [Back]. An empty or unusable seed shakes the field with "seeds are numbers or words".
   - **Loading:** the staged bar from Interaction states, one label per real stage: "Raising the mountains…" (world generation), "Shaping the land…" (terrain bands, which fill the bar), "Setting the first people by the river…" (settlements and camera). The seed stays on screen. The terrain build is spread across frames so the bar moves.
-  - **Play** opens paused at year 0 on Eden, per the journey storyboard.
+  - **Play** opens paused at year 0 on the Garden, per the journey storyboard.
   - **Esc menu:** pauses the world while open. [Resume] [Save] [Settings] [New world] [Main menu] [Quit]. Esc first clears an armed power or a selection; only an Esc with nothing to clear opens the menu.
   - **Saves** *(added 2026-10-27 with save and load)*: one world slot plus R12's three rolling autosaves, in `user://saves/`. Save writes the slot; leaving a world (New world, Main menu, Quit) writes it too, so Continue always has the last world played. Kingdom events in the log are UI-only (R4) and start fresh after a load; verses are saved.
   - **Settings:** pause on great events (on by default), UI scale (80–150%), and show frame time. Saved to `user://settings.cfg`.
@@ -1992,8 +2103,8 @@ Adopted as specified:
 
 | Feature | Loading | Empty | Error | Success | Partial |
 |---|---|---|---|---|---|
-| New world | "Raising the mountains…" staged bar (height→climate→biomes→Eden), seed shown | — | invalid seed: shake + "seeds are numbers or words" | slow zoom to Eden glow | — |
-| Map | biome map fades in | unsettled land desaturated; only Eden lit at year 0 | — | settled tiles in full color | border shimmer while a split candidate is pending |
+| New world | "Raising the mountains…" staged bar (height→climate→biomes→Garden), seed shown | — | invalid seed: shake + "seeds are numbers or words" | slow zoom to Garden glow | — |
+| Map | biome map fades in | unsettled land desaturated; only the Garden lit at year 0 | — | settled tiles in full color | border shimmer while a split candidate is pending |
 | Power toolbar | — | — | invalid target: red cursor + reason ("Bless needs people") | impact effect + witness ring briefly | brush power mid-drag shows the painted footprint |
 | Scripture panel | — | Genesis verse at year 0 ("In the beginning the Watcher set the first people by the river…") ending "Act, and they will remember." | — | new verse slides in at top, gold edge 3 s | "and N more events" row (dropped counts) |
 | Inspector | — | empty tile: biome, capacity, "No one lives here yet" | — | people, culture, belief bars; notable card | dead notable shown as a legend with a scripture link |
@@ -2004,8 +2115,8 @@ Adopted as specified:
 | Step | Player does | Player feels | Plan specifies |
 |---|---|---|---|
 | 1 | Clicks New World | anticipation | loading state |
-| 2 | Sees the Eden glow and the Genesis verse | wonder, "these are mine" | Genesis verse, gold border |
-| 3 | Bless pulses once over Eden | invited to act | guided opening (D4) |
+| 2 | Sees the Garden glow and the Genesis verse | wonder, "these are mine" | Genesis verse, gold border |
+| 3 | Bless pulses once over the Garden | invited to act | guided opening (D4) |
 | 4 | Casts the first power with a preview | power, control | aiming (D10) |
 | 5 | Reads the witness's verse (pinned 4 s); a one-time tip suggests 5× | delight, "they got it wrong" | verse pin, speed tip |
 | 6 | First split | loss and pride | split ceremony (D5): drop to 1× and pause, frame both daughters, card shows both names and which keeps favor, [Read both scriptures] [Continue] |
@@ -2708,6 +2819,7 @@ Unresolved Decisions: none.
 | Design Review | `/plan-design-review` | UI/UX gaps | 2 | CLEAR | run 2: score 2/10 → 8/10, 12 decisions |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
+- **OUT OF THE GARDEN (2026-10-28):** `/plan-eng-review` of the new milestone: CLEAR, D1 to D17 answered by the author, outside voice 8 findings (6 adopted, 2 asked as D16 and D17), reality rows 9/9. Record: `docs/designs/out-of-the-garden.md`.
 - **OUTSIDE COVERAGE:** codex was unavailable for every phase (no git repo). Native Claude subagents completed every phase; this is in-host coverage, not outside coverage.
 - **VERDICT:** DESIGN CLEARED (both runs). Eng review is not CLEAR: issues_open, with every finding mapped to approved tasks. All planned systems are now reviewed for both engineering and design. Once a git repo exists, rerun with Codex.
 
