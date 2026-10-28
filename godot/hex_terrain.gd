@@ -20,6 +20,7 @@ const STEP_PX := 7.0  # screen height of one terrace
 const SEA_LEVEL := 0.5  # sim-core worldgen::SEA_LEVEL
 const OCEAN := 0
 const MOUNTAIN := 5
+const ICE := 6
 # Land within this many terraces of its neighbors slopes to meet them; a
 # bigger drop, a mountain or the sea keeps a cliff.
 const SLOPE_STEPS := 2
@@ -234,6 +235,10 @@ func _terrace(tiles) -> void:
 		if _biomes[i] == OCEAN:
 			steps[i] = -1
 			continue
+		# Ice is a calm flat sheet, not the relief under it (art bible, Floors).
+		if _biomes[i] == ICE:
+			steps[i] = 0
+			continue
 		var x: int = i % grid_w
 		var y: int = i / grid_w
 		var sum := 0.0
@@ -399,10 +404,11 @@ func _emit_column(x: int, y: int) -> void:
 		var a := corner(c1)
 		var b := corner(c2)
 		var points := [a, (a + b) * 0.5, b]
-		var shade := (SIDE_SE if side == 1 else SIDE_SW) * (0.85 if water else 1.0)
+		# No face below the ambient floor (art bible, Floors).
+		var shade := maxf((SIDE_SE if side == 1 else SIDE_SW) * (0.85 if water else 1.0), AMBIENT)
 		var top_color := Color(shade, KIND_SIDE, 0.5, 0.5)
 		# The foot of a cliff sits in its own shadow.
-		var foot_color := Color(shade * 0.72, KIND_SIDE, 0.5, 0.5)
+		var foot_color := Color(maxf(shade * 0.72, AMBIENT), KIND_SIDE, 0.5, 0.5)
 		for e in 2:
 			var ta := _project(center + points[e], tops[e])
 			var tb := _project(center + points[e + 1], tops[e + 1])

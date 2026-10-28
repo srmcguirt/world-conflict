@@ -20,6 +20,14 @@ uniform vec3 gold = vec3(0.851, 0.659, 0.271); // Chosen gold #D9A845
 uniform vec3 ink = vec3(0.071, 0.067, 0.063); // #121110
 uniform vec3 umber = vec3(0.165, 0.122, 0.090); // #2A1F17
 uniform vec3 snow_white = vec3(0.91, 0.94, 0.96); // art bible ice mid #E8F0F6
+// Settled and unsettled land, and the grade (art bible).
+uniform vec3 settled_warm = vec3(1.05, 1.0, 0.90);
+uniform vec3 unsettled_cool = vec3(0.92, 0.96, 1.04);
+uniform float unsettled_mix = 0.18;
+uniform vec3 highlight_gold = vec3(1.06, 1.0, 0.86);
+uniform float highlight_from = 0.62;
+uniform float highlight_mix = 0.35;
+uniform float saturation_cap = 0.85;
 
 varying float v_light;
 varying float v_kind;
@@ -74,6 +82,16 @@ void fragment() {
 
 		col = mix(col, snow_white, snow);
 
+		// Settled land warm, unsettled land cool (Kinetic Sand Glyphs).
+		if (!water && here.b < 0.5 && snow < 0.5) {
+			if (mine > 0.5) {
+				col *= settled_warm;
+			} else {
+				float luma = dot(col, vec3(0.299, 0.587, 0.114));
+				col = mix(col, luma * unsettled_cool, unsettled_mix);
+			}
+		}
+
 		// Every hex reads as a hex: a faint seam along its edge.
 		light *= 1.0 - 0.07 * smoothstep(0.9, 0.99, edge);
 
@@ -106,6 +124,16 @@ void fragment() {
 	col *= light;
 	// Grade: shadows lift toward umber, never black (art bible).
 	col = mix(umber, col, smoothstep(0.0, 0.55, light) * 0.25 + 0.75);
+	// Highlights roll toward gold.
+	float luma = dot(col, vec3(0.299, 0.587, 0.114));
+	col = mix(col, col * highlight_gold, smoothstep(highlight_from, 1.0, luma) * highlight_mix);
+	// Saturation never past the cap: strong colors keep hue, lose chroma.
+	float high = max(col.r, max(col.g, col.b));
+	float chroma = high - min(col.r, min(col.g, col.b));
+	float saturation = chroma / max(high, 1e-4);
+	if (saturation > saturation_cap) {
+		col = high - (high - col) * (saturation_cap / saturation);
+	}
 
 	if (night > 0.01) {
 		col = mix(col, umber, 0.25 * night);

@@ -137,6 +137,9 @@ func finish() -> void:
 	camera = Camera2D.new()
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 10.0
+	# The view never leaves the map north or south; east-west it wraps.
+	camera.limit_top = int(terrain.top(0, 0).y - HexTerrain.RADIUS)
+	camera.limit_bottom = int(terrain.top(0, grid_h - 1).y + HexTerrain.RADIUS)
 	add_child(camera)
 	camera.make_current()
 	_build_hud()
@@ -439,7 +442,10 @@ func _settlement_scale() -> float:
 
 
 func _set_zoom(z: float) -> void:
-	zoom = clampf(z, 0.4, 5.0)
+	# Never zoom out past the map's height: no ink void above and below it.
+	var map_h := terrain.top(0, grid_h - 1).y - terrain.top(0, 0).y + 2.0 * HexTerrain.RADIUS
+	var fill := get_viewport().get_visible_rect().size.y / map_h
+	zoom = clampf(z, maxf(0.4, fill), 5.0)
 	camera.zoom = Vector2(zoom, zoom)
 	var grow := _settlement_scale()
 	for layer in [settlement_layer] + _ghost_layers:

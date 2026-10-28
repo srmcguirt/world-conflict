@@ -55,6 +55,30 @@ One pass over everything: lift shadows toward umber (never pure black), roll
 highlights toward gold, cap saturation at 0.85. The palette *is* the grade —
 screenshots should histogram into these families, not into noise.
 
+- **Shadow lift:** a fragment at light 0 keeps 75% of its color and takes 25%
+  umber; the lift fades out by light 0.55.
+- **Highlight roll:** above luminance 0.62, colors lean toward gold, up to 35%
+  of the way to `color × (1.06, 1.00, 0.86)` at luminance 1.
+- **Saturation cap:** HSV saturation never exceeds 0.85; stronger colors keep
+  their hue and lose chroma.
+
+## Settled and unsettled land
+
+The direction's rule (Kinetic Sand Glyphs: "settled land warm and unsettled
+land cool"), so a people's land reads at a glance without an overlay:
+
+- **Settled** (a people lives on the tile): warm by `× (1.05, 1.00, 0.90)`.
+- **Unsettled land:** 18% of the way to its own luminance tinted cool
+  `(0.92, 0.96, 1.04)`; ice takes it too and reads a shade colder. Water is
+  untouched.
+
+## Floors
+
+- No face goes below **ambient 0.38**, cliff feet included: a cliff's foot
+  darkens to 0.72 of its face but never under the ambient floor.
+- **Ice** is a flat sheet at the first terrace: no relief, so the polar caps
+  read as calm white and not as static.
+
 ## Fog and haze
 
 - Atmospheric perspective: desaturate 18% and cool toward umber over the outer
