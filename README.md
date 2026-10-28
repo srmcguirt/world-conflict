@@ -17,6 +17,9 @@ cargo build -p sim-gd
 godot --path godot
 ```
 
+`scripts/release.sh` builds the signed macOS app into `exports/` (needs Godot's
+4.7.2 export templates).
+
 `scripts/check.sh` is the quality gate: fmt, clippy with the workspace lints,
 the sim's tests, and gdlint/gdformat.
 

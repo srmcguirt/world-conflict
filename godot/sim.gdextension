@@ -5,4 +5,7 @@ reloadable = true
 
 [libraries]
 macos.debug = "res://../target/debug/libsim_gd.dylib"
-macos.release = "res://../target/release/libsim_gd.dylib"
+; The editor loads the debug library straight from cargo's target directory.
+; An export bundles only files inside the project, so the release library is
+; copied into res://bin by scripts/release.sh (design, Distribution Plan).
+macos.release = "res://bin/libsim_gd.dylib"
