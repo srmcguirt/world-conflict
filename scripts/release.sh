@@ -12,6 +12,33 @@ cd "$(git rev-parse --show-toplevel)"
 
 app_zip="exports/World Conflict.zip"
 check="exports/check"
+godot_version="4.7.2.stable"
+official="$HOME/Library/Application Support/Godot/export_templates/$godot_version/macos.zip"
+# The export preset's custom template (godot/export_presets.cfg).
+arm64_template="exports/templates/macos-arm64.zip"
+
+# The official template is universal (arm64 + x86_64), but the sim library is
+# arm64 only (D3), so the Intel half could never run. Thin both engine
+# binaries to arm64 and rename them the way Godot looks for an arm64 export;
+# that roughly halves the app. Rebuilt from the official template, never
+# committed.
+make_arm64_template() {
+  if [[ ! -f "$official" ]]; then
+    echo "release: install Godot's $godot_version export templates first" >&2
+    exit 1
+  fi
+  local work="exports/templates/work"
+  rm -rf "$work" && mkdir -p "$work"
+  ditto -x -k "$official" "$work"
+  local bin="$work/macos_template.app/Contents/MacOS"
+  for kind in release debug; do
+    lipo -thin arm64 "$bin/godot_macos_$kind.universal" -output "$bin/godot_macos_$kind.arm64"
+    rm "$bin/godot_macos_$kind.universal"
+  done
+  rm -f "$arm64_template"
+  (cd "$work" && zip -q -r -y "../macos-arm64.zip" macos_template.app)
+  rm -rf "$work"
+}
 
 echo "== release library"
 cargo build --release -p sim-gd --locked
@@ -20,7 +47,11 @@ cargo build -p sim-gd --locked
 mkdir -p godot/bin exports
 cp target/release/libsim_gd.dylib godot/bin/
 
-echo "== export (macOS, ad-hoc signed; the sim library is arm64, D3)"
+echo "== arm64 engine template"
+make_arm64_template
+echo "$(du -h "$arm64_template" | cut -f1) $arm64_template"
+
+echo "== export (macOS arm64, ad-hoc signed)"
 godot --headless --path godot --import >/dev/null 2>&1 || true
 godot --headless --path godot --export-release "macOS" "../$app_zip"
 
@@ -36,6 +67,7 @@ if [[ -z "$lib" ]]; then
   exit 1
 fi
 echo "sim library: $(lipo -archs "$lib")"
+echo "engine: $(lipo -archs "$app/Contents/MacOS/World Conflict")"
 
 # The shot tour loads seed 1, builds the terrain and renders before quitting:
 # if the bundled library didn't load, no shot is ever taken.
