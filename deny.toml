@@ -7,7 +7,9 @@ yanked = "deny"
 ignore = []
 
 [licenses]
-# gdext is MPL-2.0; Azgaar-derived code is MIT (attribution noted in NOTICE).
+# Dependencies only: gdext is MPL-2.0. Every allowed license lets the game be
+# sold. If Azgaar algorithms are ever ported (design, The 50% head start),
+# their MIT notice goes in a NOTICE file.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -20,6 +22,10 @@ allow = [
     "CC0-1.0",
 ]
 confidence-threshold = 0.9
+# This workspace's own crates (publish = false) carry the project's
+# noncommercial license; allowing it here would also let a noncommercial
+# dependency in, which would stop the game being sold.
+private = { ignore = true }
 
 [bans]
 multiple-versions = "warn"

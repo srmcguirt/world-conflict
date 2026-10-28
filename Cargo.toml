@@ -7,7 +7,9 @@ version = "0.1.0"
 edition = "2024"
 # gdext 0.5.5 requires Rust 1.94+.
 rust-version = "1.94"
-license = "MIT"
+# Source-available, noncommercial: see LICENSE.md. Commercial rights stay
+# with the author.
+license = "PolyForm-Noncommercial-1.0.0"
 # A game, never a crates.io library; also lets cargo-deny accept the
 # workspace path dependency (deny.toml allow-wildcard-paths).
 publish = false
