@@ -21,7 +21,7 @@ postcard = { version = "1", default-features = false, features = ["use-std"] }
 
 [dev-dependencies]
 # Benchmark gate only: never linked into the shipped dylib.
-criterion = "0.5"
+criterion = "0.8"
 
 [[bench]]
 name = "tick"
