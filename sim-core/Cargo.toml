@@ -10,7 +10,7 @@ license.workspace = true
 # Determinism contract: transcendental math goes through libm, not platform intrinsics.
 libm = "0.2"
 # Seeded RNG: one independent stream per system, derived from the world seed.
-rand = { version = "0.9", default-features = false, features = ["std"] }
+rand = { version = "0.10", default-features = false, features = ["std"] }
 # Building catalog and invention graph are data files (design, Data not code).
 ron = "0.8"
 serde = { version = "1", features = ["derive"] }
