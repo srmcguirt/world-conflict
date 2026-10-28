@@ -163,6 +163,10 @@ pub struct World {
     /// The next geology pass, built a few rows a year; derived, not saved.
     #[serde(skip)]
     pub(crate) pending_ground: geology::Pending,
+    /// The real world's shaping events placed on this one (D28); derived from
+    /// the seed, not saved, and placed again after a load.
+    #[serde(skip)]
+    pub(crate) history: Option<crate::history::Plan>,
 }
 
 impl World {
@@ -175,6 +179,7 @@ impl World {
             temperature,
             biome,
             carrying_capacity,
+            history,
         } = worldgen::generate(seed);
         let base_capacity = carrying_capacity.clone();
         let ground = elevation.clone();
@@ -223,6 +228,7 @@ impl World {
             ground,
             ground_revision: 0,
             pending_ground: geology::Pending::default(),
+            history: Some(history),
         };
         crate::garden::plant(&mut world);
         world.faiths.push(Faith {
@@ -395,6 +401,14 @@ impl World {
     }
 
     /// Every settlement, indexed by settlement id.
+    /// The real world's shaping events placed on this one (D28), placed
+    /// again from the seed if a load left them out.
+    pub fn history(&mut self) -> &crate::history::Plan {
+        let seed = self.seed;
+        self.history
+            .get_or_insert_with(|| crate::history::plan(seed))
+    }
+
     /// Bumped whenever geology moves the ground (D27).
     pub fn ground_revision(&self) -> u64 {
         self.ground_revision

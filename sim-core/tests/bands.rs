@@ -126,11 +126,16 @@ fn a_band_founds_a_tier_zero_camp_only_on_unclaimed_land() {
             for settlement in &world.settlements()[count..] {
                 founded += 1;
                 assert_eq!(settlement.tier, 0, "a new camp starts at tier 0");
+                // A tile the sea or an emptied settlement released this year
+                // is open again (D16, D27); one still held by another is not.
                 for &tile in &settlement.catchment {
-                    assert_eq!(
-                        claimed[tile],
-                        u32::MAX,
-                        "seed {seed}: a camp claimed tile {tile}, which was already claimed"
+                    let held = claimed[tile] != u32::MAX
+                        && world.settlements()[claimed[tile] as usize]
+                            .catchment
+                            .contains(&tile);
+                    assert!(
+                        !held,
+                        "seed {seed}: a camp claimed tile {tile}, which another still holds"
                     );
                 }
                 assert!(

@@ -53,21 +53,34 @@ pub fn plant(world: &mut World) {
     write_founding(world, garden, homes);
 }
 
-/// The settleable tile with the most carrying capacity on the largest
-/// landmass, so humanity starts where it can spread (D18; D26).
-fn best_land(world: &World) -> Option<usize> {
-    let mainland = largest_landmass(world);
+/// The settleable tile with the most carrying capacity near the cradle the
+/// catalog was placed around (D28), else on the largest landmass, so
+/// humanity starts where it can spread (D18; D26).
+fn best_land(world: &mut World) -> Option<usize> {
+    let near_cradle = world.history().cradle.map(|cradle| {
+        let (cx, cy) = (cradle % GRID_WIDTH, cradle / GRID_WIDTH);
+        let mut ring = vec![false; world.biome.len()];
+        for (x, y) in hex::disc(cx, cy, CRADLE_REACH) {
+            ring[y * GRID_WIDTH + x] = true;
+        }
+        ring
+    });
+    let allowed = near_cradle
+        .filter(|ring| (0..ring.len()).any(|t| ring[t] && worldgen::settleable(world.biome[t])))
+        .unwrap_or_else(|| largest_landmass(world));
     let mut best = None;
     let mut most = -1.0_f32;
-    for (i, &on_mainland) in mainland.iter().enumerate() {
-        if on_mainland && worldgen::settleable(world.biome[i]) && world.carrying_capacity[i] > most
-        {
+    for (i, &inside) in allowed.iter().enumerate() {
+        if inside && worldgen::settleable(world.biome[i]) && world.carrying_capacity[i] > most {
             most = world.carrying_capacity[i];
             best = Some(i);
         }
     }
     best
 }
+
+/// How far from the catalog's cradle the Garden may sit.
+const CRADLE_REACH: u32 = 4;
 
 /// Which tiles belong to the largest stretch of land joined over land (the
 /// lower first tile wins a tie).

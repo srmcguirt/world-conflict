@@ -140,7 +140,9 @@ fn settlements_only_form_on_settled_ground() {
     world.step(700);
     let settlements = world.settlements();
     assert!(!settlements.is_empty());
-    for s in settlements {
+    // A settlement whose land the sea took keeps its record after it
+    // releases the land (D16, D27); only living ones are checked.
+    for s in settlements.iter().filter(|s| !s.catchment.is_empty()) {
         assert!(
             world.population[s.tile] >= 1.0,
             "settlement {} sits on a settled tile",

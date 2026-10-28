@@ -403,7 +403,8 @@ mod tests {
         world.step(700);
         let settlements = &world.settlements;
         assert!(!settlements.is_empty());
-        for s in settlements {
+        // Released settlements keep their records (D16, D27).
+        for s in settlements.iter().filter(|s| !s.catchment.is_empty()) {
             assert!(world.population[s.tile] >= 1.0);
         }
     }

@@ -152,6 +152,8 @@ pub struct GeneratedWorld {
     pub biome: Vec<Biome>,
     /// Population the tile can carry, corrected for latitude (design, Latitude correction).
     pub carrying_capacity: Vec<f32>,
+    /// The real world's shaping events, placed on this one (D28).
+    pub history: crate::history::Plan,
 }
 
 /// Latitude of a tile row in degrees, +90 at row 0 down to -90.
@@ -189,6 +191,22 @@ pub fn classify(elevation: f32, moisture: f32, _temperature: f32) -> Biome {
 
 /// Generates a whole world from `seed`. Same seed, same world.
 pub fn generate(seed: u64) -> GeneratedWorld {
+    let history = crate::history::plan(seed);
+    let elevation = elevation_with(seed, 0, &history);
+    let mut world = fields(seed, &elevation);
+    world.history = history;
+    world
+}
+
+/// The world as the plates alone left it, before the catalog's events: what
+/// the catalog places them on (D28).
+pub(crate) fn base_world(seed: u64) -> GeneratedWorld {
+    let elevation = elevation_with(seed, 0, &crate::history::Plan::default());
+    fields(seed, &elevation)
+}
+
+/// Moisture, temperature, biome and capacity for an elevation field.
+fn fields(seed: u64, elevation_field: &[f32]) -> GeneratedWorld {
     let tiles = GRID_WIDTH * GRID_HEIGHT;
     let mut world = GeneratedWorld {
         elevation: vec![0.0; tiles],
@@ -196,9 +214,8 @@ pub fn generate(seed: u64) -> GeneratedWorld {
         temperature: vec![0.0; tiles],
         biome: vec![Biome::Ocean; tiles],
         carrying_capacity: vec![0.0; tiles],
+        history: crate::history::Plan::default(),
     };
-
-    let elevation_field = elevation_at(seed, 0);
     for y in 0..GRID_HEIGHT as i32 {
         let lat = latitude_deg(y as usize);
         let area = latitude_area_factor(lat);
@@ -305,9 +322,14 @@ struct Breakup {
 /// drifting during play (D27), so the same seed at a later year gives the
 /// same land moved on: rifts wider, collisions higher, hotspot chains longer.
 pub fn elevation_at(seed: u64, years: u64) -> Vec<f32> {
+    elevation_with(seed, years, &crate::history::plan(seed))
+}
+
+/// [`elevation_at`] with the catalog already placed.
+pub(crate) fn elevation_with(seed: u64, years: u64, history: &crate::history::Plan) -> Vec<f32> {
     let mut raw = vec![0.0_f32; GRID_WIDTH * GRID_HEIGHT];
     crust_rows(seed, years, 0..GRID_HEIGHT, &mut raw);
-    finish_ground(seed, years, raw)
+    finish_ground(seed, years, raw, history)
 }
 
 /// The costly half of [`elevation_at`], a band of rows at a time, so geology
@@ -327,12 +349,18 @@ pub fn crust_rows(seed: u64, years: u64, rows: std::ops::Range<usize>, raw: &mut
     }
 }
 
-/// The cheap, whole-map half of [`elevation_at`]: erosion, then volcanoes,
-/// then the rescale to sea level.
-pub fn finish_ground(seed: u64, years: u64, mut raw: Vec<f32>) -> Vec<f32> {
+/// The cheap, whole-map half of [`elevation_at`]: erosion, volcanoes, the
+/// catalog's events as far as they have run, then the rescale to sea level.
+pub fn finish_ground(
+    seed: u64,
+    years: u64,
+    mut raw: Vec<f32>,
+    history: &crate::history::Plan,
+) -> Vec<f32> {
     erode(&mut raw);
     // Volcanoes after weathering: a cone's age already wears it down.
     Breakup::new(seed, years).volcanoes(&mut raw);
+    history.apply(years, &mut raw);
     rescale(&raw)
 }
 

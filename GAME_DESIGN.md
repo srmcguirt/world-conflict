@@ -975,7 +975,7 @@ Built and gated in three stages, nothing cut (eng review D6): **Stage 1, the peo
 - The design's playtest gate holds: a friend plays for 30 minutes and tells a story about "their people" without being prompted.
 
 ## Milestones (each one is playable)
-1. **Living Map:** world generation (a supercontinent breaking into drifting plates, hotspot island chains and erosion, plus noise detail; noise moisture → 6 biomes; *2026-10-28, D25*), the Garden, population growth toward biome carrying capacity, crowding-driven migration, culture drift and blending. *Done when:* a 2,000-year run shows 3 or more visibly distinct peoples, separated by terrain.
+1. **Living Map:** world generation (a supercontinent breaking into drifting plates, hotspot island chains and erosion, plus noise detail, with the real world's shaping events set symbolically around the Garden (D28); noise moisture → 6 biomes; *2026-10-28, D25*), the Garden, population growth toward biome carrying capacity, crowding-driven migration, culture drift and blending. *Done when:* a 2,000-year run shows 3 or more visibly distinct peoples, separated by terrain.
 2. **First Witness:** the 6 powers, witness promotion, generated names, scripture panel. *Done when:* you smite something and read what someone believed you meant by it.
 3. **Belief:** belief vectors, doctrines, prophets, schisms, and rival religions about the same god.
 4. **Adaptation:** trait drift (UV, cold, altitude), cosmetic perks, notable portraits, dress and architecture tints.

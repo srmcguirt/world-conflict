@@ -39,6 +39,9 @@ pub struct Event {
     pub tile: usize,
     /// The polity it concerns, if any.
     pub polity_id: Option<u32>,
+    /// The settlement it concerns, if any: its seat can move when the sea
+    /// takes the old one (D27), so the tile alone does not name it.
+    pub settlement_id: Option<u32>,
 }
 
 /// The bounded queue between the sim and the UI (R4).
@@ -122,6 +125,7 @@ pub fn record_changes(world: &mut World, before: &KingdomSnapshot) {
             culture_id: settlement.culture_id,
             tile: settlement.tile,
             polity_id,
+            settlement_id: Some(settlement.id),
         };
         let old = before
             .settlements
@@ -156,6 +160,7 @@ pub fn record_changes(world: &mut World, before: &KingdomSnapshot) {
             culture_id: polity.culture_id,
             tile,
             polity_id: Some(polity.id),
+            settlement_id: None,
         };
         match before.polities.iter().find(|(id, _)| *id == polity.id) {
             None => found.push(event(EventKind::KingdomFounded)),
@@ -250,6 +255,7 @@ mod tests {
             culture_id: 0,
             tile: 0,
             polity_id: None,
+            settlement_id: None,
         }
     }
 

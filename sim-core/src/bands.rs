@@ -659,10 +659,13 @@ mod tests {
         world.step(STRANDED_YEARS as u32 + 1);
         let home = world.settlements[0].tile;
         let people = world.settlements[0].culture_id;
-        let start = hex::ring(home % GRID_WIDTH, home / GRID_WIDTH, 3)
+        // Unclaimed land a few hexes out, so the band does not already stand
+        // in a settlement.
+        let start = (3..=6)
+            .flat_map(|radius| hex::ring(home % GRID_WIDTH, home / GRID_WIDTH, radius))
             .map(|(x, y)| y * GRID_WIDTH + x)
-            .find(|&t| worldgen::settleable(world.biome[t]))
-            .expect("land three hexes from the first camp");
+            .find(|&t| worldgen::settleable(world.biome[t]) && world.settlement_of[t] == u32::MAX)
+            .expect("open land a few hexes from the first camp");
         world.bands.clear();
         world.bands.push(Band {
             id: 999,
@@ -678,7 +681,7 @@ mod tests {
             belief: [0.0; belief::AXES],
             traits: [0.5; traits::TRAITS],
         });
-        assert!(!walk(&mut world, 0), "the band sets out for home");
+        assert!(!head_home(&mut world, 0), "the band sets out for home");
         let Goal::Kin(kin) = world.bands[0].goal else {
             panic!(
                 "a band past its years heads to its kin, not {:?}",

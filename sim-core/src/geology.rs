@@ -60,7 +60,7 @@ pub fn tick_geology(world: &mut World) {
         return;
     }
     let raw = std::mem::take(&mut world.pending_ground.raw);
-    let target = worldgen::finish_ground(seed, pass, raw);
+    let target = worldgen::finish_ground(seed, pass, raw, world.history());
     let mut lost = Vec::new();
     let mut moved = false;
     for (tile, &ground) in target.iter().enumerate() {
@@ -84,7 +84,37 @@ pub fn tick_geology(world: &mut World) {
     for tile in lost {
         displace(world, tile);
     }
+    waves(world, pass);
     bands::replan_after_geology(world);
+}
+
+/// Share of the people on a coast a volcano's wave takes.
+const WAVE_TOLL: f32 = 0.4;
+
+/// A volcano's collapse sends a wave: every lived-on coast within its reach
+/// loses [`WAVE_TOLL`] of its people (D28, the island that blew apart).
+fn waves(world: &mut World, year: u64) {
+    let due: Vec<_> = world
+        .history()
+        .waves
+        .iter()
+        .filter(|w| w.year == year)
+        .copied()
+        .collect();
+    for wave in due {
+        let (cx, cy) = (
+            wave.center[0].round() as usize % GRID_WIDTH,
+            wave.center[1].round().clamp(0.0, GRID_HEIGHT as f32 - 1.0) as usize,
+        );
+        for (x, y) in crate::hex::disc(cx, cy, wave.reach as u32) {
+            let tile = y * GRID_WIDTH + x;
+            let shore = crate::hex::neighbors(x, y)
+                .any(|(nx, ny)| world.biome[ny * GRID_WIDTH + nx] == Biome::Ocean);
+            if shore && world.biome[tile] != Biome::Ocean {
+                world.population[tile] *= 1.0 - WAVE_TOLL;
+            }
+        }
+    }
 }
 
 /// A tile can no longer be lived on: its people move into the rest of their

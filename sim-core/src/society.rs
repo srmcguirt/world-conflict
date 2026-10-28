@@ -363,6 +363,7 @@ pub fn tick_unrest(world: &mut World) {
             culture_id,
             tile,
             polity_id: Some(polity_id),
+            settlement_id: None,
         };
         let protest = kingdom_event(crate::events::EventKind::Protest);
         let riot = kingdom_event(crate::events::EventKind::Riot);

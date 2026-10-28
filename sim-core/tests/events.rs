@@ -56,7 +56,7 @@ fn the_latest_tier_event_matches_the_settlement_now() {
     let (events, _) = world.drain_events();
     for settlement in world.settlements() {
         let last = events.iter().rev().find(|e| {
-            e.tile == settlement.tile
+            e.settlement_id == Some(settlement.id)
                 && matches!(
                     e.kind,
                     EventKind::TierUp { .. } | EventKind::TierDown { .. }

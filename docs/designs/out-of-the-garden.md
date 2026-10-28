@@ -717,3 +717,28 @@ Built for review: the Garden sits on the best land of the largest landmass joine
 State: approved
 Actual answer: the plates keep drifting through play (user requests 2026-10-28: "bigger rifts almost like how the Appalachian mountains and the Atlantic Ocean have with the British isles and coast of Europe ... to separate and make them adapt as time passes"; "Land slamming into other land masses should be part of the map getting settled"; "volcanic activities that continue all the time").
 Accepted scope: each plate turns a further 90% of its pre-year-0 drift over 5,000 years, so the fastest cross about 13 tiles: rifts widen into young seas, collisions fold ranges and close seas into land bridges, hotspot chains grow. The supercontinent carries ancient worn ranges that the breakup splits onto facing coasts. Every 50 years the land is regenerated for the year from the seed (built a few rows a year so no single year carries it) and applied as a shift, so a power's raise or lower stays. A tile that stops being livable (sea, or pushed up into mountain) moves its people into the rest of their land, else away as a refugee band; a drowned tile leaves its catchment; an unlivable seat moves to the settlement's most populous land. Walking bands re-plan. The map rebuilds its terrain on each pass. A geology year adds about 1.7 ms; the 25-year passes already ran 7-8.5 ms and some budding years 24 ms before this, over the 8 ms budget (a separate fix). M6a's tier test now allows the design's one-check demotion grace, and ranks only settlements that still hold land.
+
+### R23: The real world's shaping events, set symbolically (D28)
+
+State: approved
+Actual answer: the catalog as proposed (user request 2026-10-28: "symbolic rifts for each of the real ones that actually happened and apply them to the generated world. Giving us a uniquely similar set of human circumstances"; approved "Yes").
+Accepted scope: `history.rs` places the catalog on every world around its cradle (the best land of the largest landmass, at the equator in practice), on the world the plates alone made; the Garden sits within 4 hexes of the cradle. Real names stay in the code as each event's symbol; the world names nothing after them.
+
+| Symbol | When | On the generated world |
+|---|---|---|
+| Atlantic, Appalachian-Caledonian | before year 0 | a wandering ocean split through the cradle's continent, on the side with less land beyond it, so the cradle keeps the larger piece; a worn range on both shores. Where the plates already opened sea there, that ocean is the split and the range runs along both its shores |
+| India into Asia, Tibet | before | a high range 14-34 tiles east-northeast of the cradle, a plateau behind it |
+| Red Sea | before | a narrow sea beside the cradle |
+| Mediterranean, Gibraltar | before | an inland sea north of the cradle, a one-tile strait to the ocean |
+| Madagascar | before | a great island off the cradle's continent |
+| Panama | before | a land bridge between the two nearest other continents, if within 16 tiles (rare on these worlds) |
+| Wallacea | before | stepping-stone islands to the continent farthest from the cradle |
+| East African Rift | years 0-5,000 | a rift valley beside the Garden, deepening steadily |
+| Persian Gulf | years 200-400 | a fertile lowland by the cradle drowns |
+| Beringia | years 800-1,500 | a lowland bridge from the cradle's continent to a far one drowns (if within 16 tiles) |
+| Doggerland, Britain | years 1,000-1,800 | an island's lowland neck to the continent drowns |
+| Sundaland | years 1,000-2,500 | a lowland shelf sinks into islands |
+| Black Sea, Bosporus | year 1,500 | a strait breaches and floods a dry basin at once |
+| Thera | year 2,500 | a volcanic island in the inland sea blows apart; its wave takes 40% of the people on every coast within 12 tiles |
+
+Edges are ragged by a seeded amount per tile. Events edit raw height before the rescale, so the geology passes carry them through play with displacement and refugees (D27). Events now carry their settlement's id, since a drowned seat moves. Eight seeds at sim-year 2,000: 13-25 peoples, 76-92% of settleable land settled. A new world takes about 67 ms. Not yet: witnesses writing the flood and the wave into scripture.

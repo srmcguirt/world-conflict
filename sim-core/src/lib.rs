@@ -21,6 +21,7 @@ pub mod faith;
 pub mod garden;
 pub mod geology;
 pub mod hex;
+pub mod history;
 pub mod language;
 pub mod names;
 pub mod notables;
