@@ -29,7 +29,10 @@ use crate::world::World;
 ///
 /// 2: the two lines (`Culture::line`, the Garden and each line's home; Out of
 /// the Garden step 1).
-pub const SAVE_VERSION: u32 = 2;
+///
+/// 3: walking bands and the settlement fields they need (Out of the Garden
+/// step 2).
+pub const SAVE_VERSION: u32 = 3;
 
 const MAGIC: &[u8; 4] = b"WCSV";
 const PREAMBLE: usize = MAGIC.len() + 4;

@@ -18,6 +18,12 @@ fn set_culture_trait(world: &mut World, culture_id: u16, axis: usize, value: f32
             world.traits[start + axis] = value;
         }
     }
+    // A people's walkers are part of it (D8).
+    for band in world.bands_mut() {
+        if band.culture_id == culture_id {
+            band.traits[axis] = value;
+        }
+    }
 }
 
 /// A tile's traits, copied out.

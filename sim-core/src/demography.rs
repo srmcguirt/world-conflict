@@ -3,9 +3,10 @@
 //!
 //! Tick order is fixed (design, Architecture): Population, Migration,
 //! Drift/Blend. Growth is logistic toward the tile's latitude-corrected
-//! carrying capacity; migration spills the crowded excess one step out, or two
-//! steps when the one-step frontier is full, which is what lets a people reach
-//! a new region across an empty desert or mountain belt and become separate.
+//! carrying capacity; migration spills the crowded excess onto roomier tiles,
+//! but only inside the catchment its own settlement claims and never onto
+//! another people's tiles. Beyond claimed land people move only as bands
+//! (Out of the Garden step 2, D7; see `bands`).
 
 use rand::Rng;
 
@@ -14,7 +15,7 @@ use crate::world::{GRID_WIDTH, World};
 use crate::worldgen::{self, Biome};
 
 /// Logistic growth per sim-year.
-const GROWTH_RATE: f32 = 0.12;
+pub(crate) const GROWTH_RATE: f32 = 0.12;
 
 /// A tile above this share of its carrying capacity spills people outward.
 const CROWDED: f32 = 0.55;
@@ -22,8 +23,9 @@ const CROWDED: f32 = 0.55;
 /// Share of the crowding excess that leaves each year.
 const MIGRATION_RATE: f32 = 0.25;
 
-/// How far a migration wave may travel when the near frontier is full.
-const WAVE_RADIUS: i32 = 5;
+/// How far a migration wave may travel when the near frontier is full: across
+/// its own catchment, never past it.
+const WAVE_RADIUS: i32 = 2 * crate::settlements::CATCHMENT_RADIUS as i32;
 
 /// Annual random mutation per axis, scaled by isolation: a people with no
 /// neighbors drifts from its kin; a crowded frontier keeps blending back.
@@ -139,17 +141,24 @@ pub fn tick_migration(world: &mut World) {
     }
 }
 
-/// Best place for one tile's excess people: closest roomy land, cheapest step.
-///
-/// The near ring is tried first. Only if every near tile is full does the wave
-/// reach [`WAVE_RADIUS`], which is how peoples cross empty belts and end up as
-/// separate components (design: empty deserts and mountains separate peoples).
+/// Best place for one tile's excess people: closest roomy land, cheapest step,
+/// inside the same settlement's catchment and empty or already its people's
+/// (D7). The near ring is tried first.
 fn migration_target(world: &World, from: usize) -> Option<usize> {
     let (x, y) = (from % GRID_WIDTH, from / GRID_WIDTH);
+    let owner = world.settlement_of[from];
+    if owner == u32::MAX {
+        return None;
+    }
+    let people = world.culture_id[from];
     for radius in 1..=WAVE_RADIUS {
         let mut best: Option<(f32, usize)> = None;
         for (nx, ny) in crate::hex::ring(x, y, radius as u32) {
             let n = ny * GRID_WIDTH + nx;
+            let theirs = world.culture_id[n];
+            if world.settlement_of[n] != owner || (theirs != NO_CULTURE && theirs != people) {
+                continue;
+            }
             let room = room_at(world, n);
             if room <= 0.0 {
                 continue;
@@ -242,7 +251,9 @@ pub fn tick_drift(world: &mut World) {
 
 /// Keeps tile membership consistent with population (design, Membership):
 /// below one person a tile carries no culture; a tile that grows back over one
-/// re-adopts the culture of its most populous settled neighbor.
+/// re-adopts the culture of its most populous settled neighbor in the same
+/// catchment, else its settlement's people, so no people grows into another's
+/// land (D7).
 pub fn sync_membership(world: &mut World) {
     for i in 0..world.population.len() {
         if world.population[i] < 1.0 {
@@ -256,7 +267,10 @@ pub fn sync_membership(world: &mut World) {
         let mut best: Option<(f32, u16)> = None;
         for (nx, ny) in culture::neighbors(x, y) {
             let n = ny * GRID_WIDTH + nx;
-            if world.culture_id[n] == NO_CULTURE || world.population[n] < 1.0 {
+            if world.culture_id[n] == NO_CULTURE
+                || world.population[n] < 1.0
+                || world.settlement_of[n] != world.settlement_of[i]
+            {
                 continue;
             }
             if best.is_none_or(|(best_pop, _)| world.population[n] > best_pop) {
@@ -265,6 +279,9 @@ pub fn sync_membership(world: &mut World) {
         }
         if let Some((_, culture_id)) = best {
             world.culture_id[i] = culture_id;
+        } else if world.settlement_of[i] != u32::MAX {
+            // No settled neighbor in its catchment: the land's own people.
+            world.culture_id[i] = world.settlements[world.settlement_of[i] as usize].culture_id;
         }
     }
 }

@@ -124,21 +124,25 @@ fn no_people_means_no_witness_and_no_verse() {
     let (x, y) = (ocean % GRID_WIDTH, ocean / GRID_WIDTH);
 
     world.step(300);
-    let before = verse_count(&world);
+    let peoples = world.cultures().len();
+    let before: usize = verse_counts(&world).iter().sum();
 
     world.queue_power(Power::Meteor, x, y);
     world.step(10);
 
     assert!(world.witnesses().is_empty(), "nobody saw it");
-    assert_eq!(verse_count(&world), before, "nobody wrote a new verse");
+    // A people founded in these ten years inherits its mother's verses; only
+    // the peoples that saw the sky could have written one.
+    let after: usize = verse_counts(&world).iter().take(peoples).sum();
+    assert_eq!(after, before, "nobody wrote a new verse");
 }
 
-fn verse_count(world: &World) -> usize {
+fn verse_counts(world: &World) -> Vec<usize> {
     world
         .cultures()
         .iter()
         .map(|culture| world.scripture_text(culture.id, 0, 64).len())
-        .sum()
+        .collect()
 }
 
 #[test]

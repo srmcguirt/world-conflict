@@ -11,6 +11,7 @@ use crate::culture::{self, Culture, Favor, LINES, Line};
 use crate::hex;
 use crate::language::Language;
 use crate::scripture::{self, Harvest, Offering, VerseKind};
+use crate::settlements;
 use crate::world::{GRID_WIDTH, World};
 use crate::worldgen::{self, Biome};
 
@@ -40,6 +41,13 @@ pub fn plant(world: &mut World) {
     };
     for line in [Line::Dirt, Line::Snake] {
         found_line(world, line, homes[line as usize]);
+    }
+    // Each line's first camp: its band of eight founds it where it stands
+    // (D7), so its people spread only inside that land.
+    for line in [Line::Dirt, Line::Snake] {
+        let tile = homes[line as usize];
+        let camp = settlements::claim(world, tile, world.culture_id[tile]);
+        world.settlements[camp].population = LINE_POPULATION;
     }
     write_founding(world, garden, homes);
 }

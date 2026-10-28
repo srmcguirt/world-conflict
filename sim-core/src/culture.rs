@@ -349,43 +349,40 @@ pub fn refresh_aggregates(world: &mut World) {
     for (culture, tiles) in world.cultures.iter_mut().zip(members.iter()) {
         culture.tiles = tiles.len() as u32;
     }
+    // Walkers count toward their people without holding tile population
+    // (D8): headcount, culture and belief, weighted like any tile's people.
+    let mut walkers = vec![(0.0_f32, [0.0_f32; DIMS]); world.cultures.len()];
+    for band in &world.bands {
+        let (count, vec) = &mut walkers[band.culture_id as usize];
+        *count += band.headcount;
+        for (sum, value) in vec.iter_mut().zip(band.culture_vec) {
+            *sum += value * band.headcount;
+        }
+    }
     let refreshed: Vec<(f32, [f32; DIMS])> = members
         .iter()
-        .map(|tiles| {
-            let population = tiles.iter().map(|&i| world.population[i]).sum();
-            (population, weighted_mean(world, tiles))
+        .zip(&walkers)
+        .map(|(tiles, (walking, walking_vec))| {
+            let settled: f32 = tiles.iter().map(|&i| world.population[i]).sum();
+            let mean = weighted_mean(world, tiles);
+            let total = settled + walking;
+            let centroid = std::array::from_fn(|k| {
+                if total > 0.0 {
+                    (mean[k] * settled + walking_vec[k]) / total
+                } else {
+                    0.0
+                }
+            });
+            (total, centroid)
         })
         .collect();
     for (culture, (population, centroid)) in world.cultures.iter_mut().zip(refreshed) {
         culture.population = population;
-        if culture.tiles > 0 {
+        if population > 0.0 {
             culture.centroid = centroid;
         }
     }
-    // Belief reads per culture, population-weighted over its tiles (design:
-    // belief lives per tile; doctrine reads per culture).
-    let mut belief_sums = vec![[0.0_f32; crate::belief::AXES]; world.cultures.len()];
-    let mut belief_weights = vec![0.0_f32; world.cultures.len()];
-    for tile in 0..world.population.len() {
-        let id = world.culture_id[tile];
-        if id == NO_CULTURE || world.population[tile] < 1.0 {
-            continue;
-        }
-        let weight = world.population[tile];
-        belief_weights[id as usize] += weight;
-        let start = tile * crate::belief::AXES;
-        for (axis, slot) in belief_sums[id as usize].iter_mut().enumerate() {
-            *slot += world.belief[start + axis] * weight;
-        }
-    }
-    for (index, culture) in world.cultures.iter_mut().enumerate() {
-        let weight = belief_weights[index];
-        if weight > 0.0 {
-            let axes: Vec<f32> = belief_sums[index].iter().map(|sum| sum / weight).collect();
-            culture.belief = Belief::from_axes(&axes);
-        }
-        culture.piety = crate::faith::piety(&culture.belief);
-    }
+    refresh_belief(world);
     // The people's home as mean (x, y): isolation and contact weigh a
     // tongue's drift (design, Tongues).
     for (culture, tiles) in world.cultures.iter_mut().zip(members.iter()) {
@@ -417,6 +414,40 @@ pub fn refresh_aggregates(world: &mut World) {
             culture.mean_cold = trait_sums[index][crate::traits::COLD] / tiles;
             culture.mean_altitude = trait_sums[index][crate::traits::ALTITUDE] / tiles;
         }
+    }
+}
+
+/// Belief reads per culture, population-weighted over its tiles and its
+/// walkers (design: belief lives per tile; doctrine reads per culture; D8).
+fn refresh_belief(world: &mut World) {
+    let mut belief_sums = vec![[0.0_f32; crate::belief::AXES]; world.cultures.len()];
+    let mut belief_weights = vec![0.0_f32; world.cultures.len()];
+    for tile in 0..world.population.len() {
+        let id = world.culture_id[tile];
+        if id == NO_CULTURE || world.population[tile] < 1.0 {
+            continue;
+        }
+        let weight = world.population[tile];
+        belief_weights[id as usize] += weight;
+        let start = tile * crate::belief::AXES;
+        for (axis, slot) in belief_sums[id as usize].iter_mut().enumerate() {
+            *slot += world.belief[start + axis] * weight;
+        }
+    }
+    for band in &world.bands {
+        let index = band.culture_id as usize;
+        belief_weights[index] += band.headcount;
+        for (slot, value) in belief_sums[index].iter_mut().zip(band.belief) {
+            *slot += value * band.headcount;
+        }
+    }
+    for (index, culture) in world.cultures.iter_mut().enumerate() {
+        let weight = belief_weights[index];
+        if weight > 0.0 {
+            let axes: Vec<f32> = belief_sums[index].iter().map(|sum| sum / weight).collect();
+            culture.belief = Belief::from_axes(&axes);
+        }
+        culture.piety = crate::faith::piety(&culture.belief);
     }
 }
 
@@ -488,11 +519,9 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
         return;
     };
 
-    let id = world.cultures.len() as u16;
     let population: f32 = part.iter().map(|&i| world.population[i]).sum();
     let centroid = weighted_mean(world, &part);
     let parent_culture = &world.cultures[parent as usize];
-    let parent_seed = parent_culture.name_seed;
 
     // Fresh, not the 10-tick cache: a split must not hand favor to a rump.
     let parent_remaining: f32 = (0..world.population.len())
@@ -504,16 +533,49 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
     // Favor follows the heir's tile from Milestone 3. Until there is a family
     // line, the parent body keeps Chosen unless the daughter has become the
     // larger people of the two.
-    let favor = if parent_culture.favor == Favor::Chosen && population > parent_remaining {
-        world.cultures[parent as usize].favor = Favor::Other;
+    let favor_moves = parent_culture.favor == Favor::Chosen && population > parent_remaining;
+    let favor = if favor_moves {
         Favor::Chosen
     } else {
         Favor::Other
     };
 
+    let Some(id) = push_daughter(
+        world,
+        parent,
+        centroid,
+        favor,
+        population,
+        part.len() as u32,
+    ) else {
+        return;
+    };
+    if favor_moves {
+        world.cultures[parent as usize].favor = Favor::Other;
+    }
     for &i in &part {
         world.culture_id[i] = id;
     }
+}
+
+/// Founds a daughter people of `parent`, speaking a dialect of her mother's
+/// tongue (design, Split rule; Tongues). Both splits and far-flung camps found
+/// daughters this way (D20). `None` once every id below [`NO_CULTURE`] is
+/// taken: the id is range-checked before the cast (outside voice).
+pub(crate) fn push_daughter(
+    world: &mut World,
+    parent: u16,
+    centroid: [f32; DIMS],
+    favor: Favor,
+    population: f32,
+    tiles: u32,
+) -> Option<u16> {
+    let id = world.cultures.len();
+    if id >= usize::from(NO_CULTURE) {
+        return None;
+    }
+    let id = id as u16;
+    let parent_seed = world.cultures[parent as usize].name_seed;
     let name_seed = mix(parent_seed ^ world.tick() ^ (u64::from(id) << 32));
     let daughter = Culture::daughter(
         &world.cultures[parent as usize],
@@ -523,7 +585,7 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
         centroid,
         favor,
         population,
-        part.len() as u32,
+        tiles,
     );
     world.cultures.push(daughter);
     world.split_watch.push(0);
@@ -538,8 +600,8 @@ fn split_off(world: &mut World, parent: u16, signature: usize) {
         id,
         name_seed,
     ));
-    let daughter = world.cultures.len() - 1;
-    world.cultures[daughter].language_id = tongue_id;
+    world.cultures[id as usize].language_id = tongue_id;
+    Some(id)
 }
 
 fn mix(mut z: u64) -> u64 {

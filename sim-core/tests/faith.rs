@@ -17,6 +17,13 @@ fn set_culture_belief(world: &mut World, culture_id: u16, belief: Belief) {
             world.set_belief(tile, belief);
         }
     }
+    // A people's walkers are part of it (D8).
+    let axes = belief.to_axes();
+    for band in world.bands_mut() {
+        if band.culture_id == culture_id {
+            band.belief = axes;
+        }
+    }
 }
 
 fn angry() -> Belief {

@@ -8,6 +8,7 @@
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
 
+use crate::bands;
 use crate::belief::{self, Belief};
 use crate::culture::{self, Culture, NO_CULTURE};
 use crate::demography;
@@ -144,6 +145,14 @@ pub struct World {
     pub(crate) events: crate::events::EventQueue,
     /// Which settlement claims each tile, or `u32::MAX` if none.
     pub(crate) settlement_of: Vec<u32>,
+    /// Bands walking outside claimed land (Out of the Garden step 2).
+    pub(crate) bands: Vec<bands::Band>,
+    /// Next band id; ids are never reused (outside voice).
+    pub(crate) next_band_id: u32,
+    /// The settlement that budded last, so budding goes round-robin (D10).
+    pub(crate) bud_cursor: u32,
+    /// The bands' own RNG stream, for quarrels and founder mutation.
+    pub(crate) band_rng: Pcg64,
 }
 
 impl World {
@@ -196,6 +205,10 @@ impl World {
             polities: Vec::new(),
             tile_polity: vec![u16::MAX; GRID_WIDTH * GRID_HEIGHT],
             settlement_of: vec![u32::MAX; GRID_WIDTH * GRID_HEIGHT],
+            bands: Vec::new(),
+            next_band_id: 0,
+            bud_cursor: u32::MAX,
+            band_rng: Pcg64::seed_from_u64(seed ^ 0xB4D5_0000_0000_0007),
         };
         crate::garden::plant(&mut world);
         world.faiths.push(Faith {
@@ -263,6 +276,13 @@ impl World {
                         culture::color(self.culture_id[i])
                     };
                     bytes.extend_from_slice(&[r, g, b, 255]);
+                }
+                // A walking band shows its people where it stands without
+                // holding tile population (D8).
+                for band in &self.bands {
+                    let at = band.tile as usize * 4;
+                    let [r, g, b] = culture::color(band.culture_id);
+                    bytes[at..at + 3].copy_from_slice(&[r, g, b]);
                 }
                 bytes
             }
@@ -361,6 +381,16 @@ impl World {
     }
 
     /// Every settlement, indexed by settlement id.
+    pub fn bands(&self) -> &[bands::Band] {
+        &self.bands
+    }
+
+    /// The walking bands, writable like the per-tile vectors are, so a tool
+    /// can set a whole people's walkers along with its tiles.
+    pub fn bands_mut(&mut self) -> &mut [bands::Band] {
+        &mut self.bands
+    }
+
     pub fn settlements(&self) -> &[Settlement] {
         &self.settlements
     }
@@ -777,6 +807,7 @@ impl World {
         //   -> Belief -> Polity -> Tech -> War
         demography::tick_population(self);
         demography::tick_migration(self);
+        bands::tick_bands(self);
         demography::tick_drift(self);
         demography::sync_membership(self);
         powers::close_windows(self);

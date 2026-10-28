@@ -195,24 +195,31 @@ fn exactly_one_culture_is_chosen_at_any_time() {
 
 #[test]
 fn a_split_creates_a_daughter_with_parent_id_and_a_distinct_vector() {
+    // Measured when each daughter is founded, against her mother's centroid
+    // the year before: a daughter founded beside her mother's camps can
+    // assimilate later, and that rate is the Stage 1 sweep's to report (D21;
+    // author's decision 2026-10-28).
     let mut world = World::new(1);
-    world.step(2_000);
-    let daughters: Vec<_> = world
-        .cultures()
-        .iter()
-        .filter(|c| c.parent_id.is_some())
-        .collect();
+    let mut daughters = 0;
+    for _ in 0..2_000 {
+        let known = world.cultures().len();
+        let centroids: Vec<_> = world.cultures().iter().map(|c| c.centroid).collect();
+        world.step(1);
+        for daughter in &world.cultures()[known..] {
+            let parent = daughter.parent_id.expect("every new people has a parent");
+            daughters += 1;
+            let distance = culture::distance(&daughter.centroid, &centroids[parent as usize]);
+            assert!(
+                distance >= 0.2,
+                "{} is founded a genuinely different people ({distance:.3})",
+                daughter.name
+            );
+        }
+    }
     assert!(
-        !daughters.is_empty(),
-        "terrain-separated peoples split (cultures: {})",
+        daughters > 0,
+        "peoples split (cultures: {})",
         world.cultures().len()
-    );
-
-    let daughter = daughters[0];
-    let parent = &world.cultures()[daughter.parent_id.unwrap() as usize];
-    assert!(
-        culture::distance(&daughter.centroid, &parent.centroid) >= 0.2,
-        "a daughter is a genuinely different people"
     );
 }
 
