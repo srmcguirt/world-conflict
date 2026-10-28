@@ -122,12 +122,12 @@ Folding into the existing design: the witness rule still interprets powers; doct
 ## Open Questions
 
 1. **The hidden clause.** Step 5 settles how part of a vision unfolds beyond the player: the world's own course can keep a promise, and some kinds carry a hidden second clause. Still open: which kinds carry a hidden clause, how the game chooses it, and how often. Decide before step 5.
-2. **The generated founding.** Which land features decide what each line offers and how they part, and how much the player sees or chooses at year 0.
+2. **The generated founding** *(settled 2026-10-28, D18 and D19)*. The Garden stays on the world's best land. Of its six neighbors, Dirt takes the most arable (highest carrying capacity) and offers its harvest; the snake's line takes the most defensible (highest elevation, falling back to the next-best land on a flat seed), offers the work of its hands, and heads for high ground to build. Ties break on the lower tile index; no RNG. The player watches: the game opens paused at year 0 on both offerings and their verses, and play sends both lines out. No player act at year 0.
 3. **What "redeem the snake's line" ends in.** Does a redeemed line become Chosen beside Dirt, merge with Dirt, or keep its own path with a new faith? How "empower Dirt" is measured.
 4. **The greatest answer.** The author named the later coming of Jesus as an answer "for freedom from sin and death for believers". Whether and how the game reflects a great late answer is the author's call, and needs care.
 5. **Pacing.** How often people pray, how many prayers wait at once, and what happens at 100× speed so the ledger never floods.
-6. **Budding rules.** Band size limits, quarrel triggers, and how bands become the peoples (cultures) the later systems expect.
-7. **Interaction with existing milestones.** What M1's "3+ distinct peoples by year 2,000" gate becomes when bands drive the split, and which existing tests change.
+6. **Budding rules** *(settled 2026-10-28, D20)*. A crowded settlement buds a band of 25; a band over 50 splits in two; once every 25 years a band rolls for a quarrel, likelier with size and low cohesion, and a quarrel ends in parting. A band that settles 6 or more hexes from its people's nearest settlement, or whose culture has drifted past the split threshold, founds a daughter people with a parent id; otherwise its camp stays its people's. Both thresholds are tuned in the sweep.
+7. **Interaction with existing milestones** *(settled by eng review D14 and D20)*. M1's "3+ distinct peoples by year 2,000" gate stays; new peoples come from bands settling far from kin or drifting apart (D20). Mechanism tests are rewritten under the regression contract (D14).
 
 8. **Recognition.** What makes a notable of the snake's line recognize a kept promise in another people's verse (the copy alone, a belief or piety threshold, a deterministic roll), and how far belief moves when it does. Blocks step 8.
 
@@ -649,3 +649,23 @@ Accepted scope: losses spread across the raided catchment, never below 8, cut by
 - Stage 1 gate: regression contract (R9), 64 seeds x 5,000 sim-years sweep (R10), the author's playtest.
 
 NO UNRESOLVED DECISIONS
+
+## After the review
+
+### R13: The generated founding (Open Question 2)
+
+State: approved
+Actual answer: A) Arable vs high ground (D18, user answer 2026-10-28)
+Accepted scope: Garden on the best land as today; Dirt takes the most arable neighbor and offers its harvest; the snake's line takes the highest neighbor (next-best land on a flat seed), offers the work of its hands and heads for high ground. Deterministic, lower tile index on ties.
+
+### R14: Year 0 for the player (Open Question 2)
+
+State: approved
+Actual answer: A) Watch the parting (D19, user answer 2026-10-28)
+Accepted scope: paused at year 0 on both offerings and their verses; play sends both lines out; no player act at year 0.
+
+### R15: Budding rules (Open Question 6)
+
+State: approved
+Actual answer: A) Real sizes, distance makes peoples (D20, user answer 2026-10-28)
+Accepted scope: bud 25; split above 50; quarrel roll every 25 years by size and low cohesion, ending in parting; a camp 6+ hexes from its people's nearest settlement or past the drift threshold founds a daughter people with a parent id. Thresholds tuned in the sweep.
