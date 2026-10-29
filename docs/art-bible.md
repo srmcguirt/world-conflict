@@ -78,6 +78,29 @@ land cool"), so a people's land reads at a glance without an overlay:
   darkens to 0.72 of its face but never under the ambient floor.
 - **Ice** is a flat sheet at the first terrace: no relief, so the polar caps
   read as calm white and not as static.
+- **Open valleys:** a mountain never rises past the screen line of beach,
+  grassland or forest up to 3 rows behind it: it drops terraces, then peak,
+  until that land shows. A high valley, and anyone living in it, is never
+  hidden behind summits; ranges climb from their far valleys toward the camera.
+
+## People
+
+Figures stand in front of the buildings (D29).
+
+- **Figure:** a slim person in the people's dress (tunic, sleeves 14% and
+  legs 38% darker, a dark belt), a head in their skin under a dark hair cap,
+  lit from the upper left so the right side is a third darker, ringed by a
+  0.9 px ink line at 75% and standing on a soft 30% ink shadow. Drawn once as
+  a smooth, mipmapped sprite and tinted per people, so edges stay clean at
+  any zoom. 6.5 world pixels tall at mean stature, 85% to 115% by stature;
+  they grow with the settlements when zoomed out. Every other band walker
+  carries a staff.
+- **Band:** one figure per 8 walkers, up to 7; a trail of its last 12 steps in
+  darkened dress, fading from 25% to 85% opacity.
+- **Townsfolk:** one figure for the first 8 people, one more each doubling, up
+  to 6, along the front of the town only.
+- **Map scale (below 0.8×):** a band is one dot in its dress color on an ink
+  ring; townsfolk are hidden.
 
 ## Fog and haze
 

@@ -287,7 +287,7 @@ func _first_settlement_tile() -> Vector2i:
 	var w: int = game.grid_w
 	var best := Vector2i(w / 2, 10)
 	var best_tier := -1
-	for s in range(0, sites.size(), 4):
+	for s in range(0, sites.size(), Game.SITE_STRIDE):
 		if sites[s + 2] == game.chosen and sites[s + 1] > best_tier:
 			best_tier = sites[s + 1]
 			best = Vector2i(sites[s] % w, sites[s] / w)

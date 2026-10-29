@@ -31,6 +31,11 @@ const MOUNTAIN_SLOPE_STEPS := 4
 # edge shared by two mountains rises into a ridge between their peaks.
 const PEAK_PX := 18.0
 const RIDGE_SHARE := 0.7
+# A mountain never rises past the screen line of settleable land up to this
+# many rows behind it, so a high valley and the people living in it are never
+# hidden behind summits (art bible, Floors).
+const VALLEY_ROWS := 3
+const SETTLEABLE := [1, 2, 3]  # beach, grassland, forest (sim-core worldgen::settleable)
 const SNOW_PX := 52.0  # height where snow starts on a mountain's faces
 const SNOW_FADE_PX := 14.0
 
@@ -79,6 +84,7 @@ var corner_lift := PackedFloat32Array()  # 6 per tile: each top corner's height 
 var center_lift := PackedFloat32Array()  # per tile: the center's height, a peak on mountains
 # 6 per tile: each side's midpoint height, a ridge between mountains
 var mid_lift := PackedFloat32Array()
+var valley_cap := PackedFloat32Array()  # per tile: the most a mountain may lift, in px
 var _biomes := PackedByteArray()
 var _heights := PackedFloat32Array()
 var _material: ShaderMaterial
@@ -133,8 +139,10 @@ func begin(heights: PackedFloat32Array, biomes: PackedByteArray) -> void:
 	corner_lift.resize(count * 6)
 	center_lift.resize(count)
 	mid_lift.resize(count * 6)
+	valley_cap.resize(count)
 	var all := range(count)
 	_terrace(all)
+	_open_valleys(all)
 	_slope_corners(all)
 	_raise_peaks(all)
 	_pending.assign(range(_bands.size()))
@@ -164,6 +172,7 @@ func update_heights(
 	_biomes = biomes
 	var region := _around(changed)
 	_terrace(region)
+	_open_valleys(region)
 	_slope_corners(region)
 	_raise_peaks(region)
 	var dirty := {}
@@ -320,7 +329,40 @@ func _peak(i: int) -> float:
 	# A per-tile hash, so a range has taller and shorter summits.
 	var roll := float((i * 2654435761) % 1000) / 1000.0
 	var altitude := float(steps[i]) / float(HEIGHT_STEPS)
-	return PEAK_PX * (0.55 + 0.45 * roll) * (0.6 + 0.6 * altitude)
+	var peak := PEAK_PX * (0.55 + 0.45 * roll) * (0.6 + 0.6 * altitude)
+	return clampf(valley_cap[i] - step_height(steps[i]), 0.0, peak)
+
+
+# Each row nearer the camera sits row_px lower on screen, so a mountain d rows
+# in front of settleable land covers it once it lifts more than d rows'
+# worth above it. Such mountains drop terraces, and later lose peak, until
+# the land behind shows: a range rises from its far valleys toward the camera.
+func _open_valleys(tiles) -> void:
+	var row_px := RADIUS * 1.5 * TILT
+	var reach := RADIUS * sqrt(3.0) * 0.75  # columns this close overlap on screen
+	var lap := world_width()
+	for i in tiles:
+		valley_cap[i] = INF
+		if _biomes[i] != MOUNTAIN or steps[i] < 0:
+			continue
+		var x: int = i % grid_w
+		var y: int = i / grid_w
+		var at := hex_center(x, y).x
+		for d in range(1, VALLEY_ROWS + 1):
+			if y - d < 0:
+				break
+			for dx in range(-1, 2):
+				var jx := posmod(x + dx, grid_w)
+				var j := (y - d) * grid_w + jx
+				var gap := absf(hex_center(jx, y - d).x - at)
+				if not SETTLEABLE.has(_biomes[j]) or minf(gap, lap - gap) > reach:
+					continue
+				# Less half a hex: this tile's back corner stays below that
+				# land's center, so the center and its far half show.
+				var line := step_height(steps[j]) + row_px * d - RADIUS * TILT
+				valley_cap[i] = minf(valley_cap[i], line)
+		if valley_cap[i] < INF:
+			steps[i] = mini(steps[i], floori(valley_cap[i] / STEP_PX))
 
 
 func _build_band(b: int) -> void:

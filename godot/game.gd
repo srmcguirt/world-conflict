@@ -35,12 +35,15 @@ const TICK_BUDGET_MS := 8.0
 const POWERS := ["Raise", "Lower", "Paint", "Bless", "Meteor", "Tornado", "Spawn"]
 const GROUND_POWERS := [0, 1, 4]  # Raise, Lower, Meteor reshape the ground
 const TIERS := ["Camp", "Village", "Town", "City"]
+# Ints per settlement in Sim.settlement_sites(): tile, tier, culture, built, people.
+const SITE_STRIDE := 5
 
 var sim: Sim
 var settings: GameSettings
 var terrain: HexTerrain
 var camera: Camera2D
 var settlement_layer: Node2D
+var people: PeopleView
 var selection_ring: Line2D
 var ui: CanvasLayer
 var color_image: Image
@@ -119,6 +122,10 @@ func prepare(world: Sim, player_settings: GameSettings) -> void:
 		ghost.position.x = side * terrain.world_width()
 		add_child(ghost)
 		_ghost_layers.append(ghost)
+	# People stand in front of the buildings (D29).
+	people = PeopleView.new()
+	people.setup(terrain, grid_w)
+	add_child(people)
 	selection_ring = Line2D.new()
 	selection_ring.width = 1.6
 	selection_ring.default_color = UiTheme.GOLD
@@ -295,6 +302,8 @@ func _process(delta: float) -> void:
 	if move != Vector2.ZERO:
 		camera.position += move.normalized() * 600.0 * delta / zoom
 	_wrap_camera()
+	var half := get_viewport().get_visible_rect().size / (2.0 * zoom)
+	people.watch(camera.get_screen_center_position(), half)
 
 
 # Panning past either edge comes round the world: the camera jumps one
@@ -390,7 +399,7 @@ func _refresh_settlements() -> void:
 	var sites: PackedInt32Array = sim.settlement_sites()
 	var biomes: PackedByteArray = sim.tile_biomes()
 	var seen := {}
-	for s in range(0, sites.size(), 4):
+	for s in range(0, sites.size(), SITE_STRIDE):
 		var tile: int = sites[s]
 		var key := Vector3i(sites[s + 1], sites[s + 2], sites[s + 3])
 		seen[tile] = true
@@ -419,6 +428,7 @@ func _refresh_settlements() -> void:
 			_views.erase(tile)
 			_ghost_views.erase(tile)
 			_view_keys.erase(tile)
+	people.refresh(sim, sites, SPEEDS[speed_index])
 
 
 func _new_view(layer: Node2D, tile: int) -> SettlementView:
@@ -448,6 +458,8 @@ func _set_zoom(z: float) -> void:
 	zoom = clampf(z, maxf(0.4, fill), 5.0)
 	camera.zoom = Vector2(zoom, zoom)
 	var grow := _settlement_scale()
+	people.zoom = zoom
+	people.grow = grow
 	for layer in [settlement_layer] + _ghost_layers:
 		for view in layer.get_children():
 			view.scale = Vector2(grow, grow)
@@ -460,7 +472,7 @@ func _chosen_center() -> Vector2:
 	var sites: PackedInt32Array = sim.settlement_sites()
 	var best := -1
 	var best_tier := -1
-	for s in range(0, sites.size(), 4):
+	for s in range(0, sites.size(), SITE_STRIDE):
 		if sites[s + 2] == chosen and sites[s + 1] > best_tier:
 			best_tier = sites[s + 1]
 			best = sites[s]
@@ -644,7 +656,7 @@ func queue_shots() -> void:
 	var sites: PackedInt32Array = sim.settlement_sites()
 	var town := center
 	var best := -1
-	for s in range(0, sites.size(), 4):
+	for s in range(0, sites.size(), SITE_STRIDE):
 		if sites[s + 2] == chosen and sites[s + 1] > best:
 			best = sites[s + 1]
 			town = terrain.top(sites[s] % grid_w, sites[s] / grid_w)
@@ -655,11 +667,13 @@ func queue_shots() -> void:
 		if heights[i] > heights[summit]:
 			summit = i
 	var peak := terrain.top(summit % grid_w, summit / grid_w)
+	var band := people.nearest_band(center)
 	_shots = [
 		{"name": "hex-map-05x", "zoom": 0.5, "at": center},
 		{"name": "hex-mountains-3x", "zoom": 3.0, "at": peak},
 		{"name": "hex-region-15x", "zoom": 1.5, "at": center},
 		{"name": "hex-town-4x", "zoom": 4.0, "at": town},
+		{"name": "hex-band-3x", "zoom": 3.0, "at": band},
 	]
 	_begin_shot()
 

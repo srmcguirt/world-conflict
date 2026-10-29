@@ -356,6 +356,35 @@ impl Sim {
             .unwrap_or_default()
     }
 
+    /// A people's mean skin color, for their figures on the map (D29).
+    #[func]
+    fn culture_skin(&self, id: i64) -> Color {
+        let skin = self
+            .world
+            .cultures()
+            .get(id as usize)
+            .map_or(sim_core::traits::START, |culture| culture.mean_skin);
+        let [r, g, b] = sim_core::traits::skin_color(skin);
+        Color::from_rgba(
+            f32::from(r) / 255.0,
+            f32::from(g) / 255.0,
+            f32::from(b) / 255.0,
+            1.0,
+        )
+    }
+
+    /// A people's mean stature, 0 to 1, so taller peoples stand taller on the
+    /// map (design, Adaptation; D29).
+    #[func]
+    fn culture_stature(&self, id: i64) -> f64 {
+        self.world
+            .cultures()
+            .get(id as usize)
+            .map_or(f64::from(sim_core::traits::START), |culture| {
+                f64::from(culture.mean_stature)
+            })
+    }
+
     /// A people's piety, 0 to 1.
     #[func]
     fn culture_piety(&self, id: i64) -> f64 {
@@ -441,11 +470,11 @@ impl Sim {
         if id == u16::MAX { -1 } else { i64::from(id) }
     }
 
-    /// Every settlement as four ints — founding tile, tier, culture id,
-    /// finished buildings — so the renderer can stand its houses on the map
-    /// (design, Rendering: settlements are buildings). A settlement whose land
-    /// the sea took or that emptied keeps its record but stands nowhere (D16,
-    /// D27).
+    /// Every settlement as five ints — founding tile, tier, culture id,
+    /// finished buildings, people (rounded) — so the renderer can stand its
+    /// houses and townsfolk on the map (design, Rendering: settlements are
+    /// buildings; D29). A settlement whose land the sea took or that emptied
+    /// keeps its record but stands nowhere (D16, D27).
     #[func]
     fn settlement_sites(&self) -> PackedInt32Array {
         self.world
@@ -458,6 +487,25 @@ impl Sim {
                     i32::from(settlement.tier),
                     i32::from(settlement.culture_id),
                     settlement.slots.iter().flatten().count() as i32,
+                    settlement.population.round() as i32,
+                ]
+            })
+            .collect()
+    }
+
+    /// Every walking band as four ints — band id, tile, culture id, headcount
+    /// (rounded) — so the map shows its people where they walk (D8, D29).
+    #[func]
+    fn band_sites(&self) -> PackedInt32Array {
+        self.world
+            .bands()
+            .iter()
+            .flat_map(|band| {
+                [
+                    band.id as i32,
+                    band.tile as i32,
+                    i32::from(band.culture_id),
+                    band.headcount.round() as i32,
                 ]
             })
             .collect()
